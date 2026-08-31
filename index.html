@@ -927,24 +927,36 @@ let sims = [];
 for (let i = 0; i < items.length; i++) {
 const item = items[i];
 
-if (item.type === 'literal_block') {
-const lines = item.text.split('\n');
-if (cursorLine + lines.length > contentLines.length) {
-return { success: false };
-}
-let blockOk = true;
-for (let j = 0; j < lines.length; j++) {
-const sourceLine = contentLines[cursorLine + j];
-const patLine = lines[j];
-const colToUse = (j === 0) ? cursorCol : 0;
-const sim = compareWithTolerance(sourceLine, patLine, threshold, 0, false, colToUse);
-if (sim < threshold) { blockOk = false; break; }
-sims.push(sim);
-}
-if (!blockOk) return { success: false };
-cursorLine += lines.length;
-cursorCol = 0;
-}
+		if (item.type === 'literal_block') {
+			const lines = item.text.split('\n');
+			if (cursorLine + lines.length > contentLines.length) {
+				return { success: false };
+			}
+
+			let sourceBlock = '';
+			for (let j = 0; j < lines.length; j++) {
+				const startCol = (j === 0) ? cursorCol : 0;
+				sourceBlock += (j > 0 ? '\n' : '') + contentLines[cursorLine + j].slice(startCol);
+			}
+			const patternBlock = lines.join('\n');
+
+			const blockSim = compareWithTolerance(
+				sourceBlock,
+				patternBlock,
+				threshold,
+				0,
+				false,
+				0
+			);
+
+			if (blockSim < threshold) {
+				return { success: false };
+			}
+
+			sims.push(blockSim);
+			cursorLine += lines.length;
+			cursorCol = 0;
+		}
 
 else if (item.type === 'inline_pattern') {
 if (cursorLine >= contentLines.length) return { success: false };
@@ -2079,8 +2091,11 @@ const sepIdx = blockLines.findIndex(line => line.trim() === '');
 if (sepIdx === -1) {
 continue;
 }
-const searchLines = blockLines.slice(0, sepIdx).filter(l => l.trim() !== '');
-const replLines = blockLines.slice(sepIdx + 1).filter(l => l.trim() !== '');
+		const searchLines = blockLines.slice(0, sepIdx)
+			.filter(l => l.trim() !== '')
+			.map(l => stripInvisibleChars(l));
+		const replLines = blockLines.slice(sepIdx + 1)
+			.filter(l => l.trim() !== '');
 if (searchLines.length === 0 || replLines.length === 0) continue;
 
 blocks.push({ searchLines, replLines });
@@ -2090,78 +2105,84 @@ return blocks;
 
 // -------------------- Helper functions --------------------
 function parseMode1Pattern(rules, sep) {
-const lines = norm(rules).split('\n');
-const patterns = [];
-let i = 0;
+	const lines = norm(rules).split('\n');
+	const patterns = [];
+	let i = 0;
 
-while (i < lines.length) {
-const trimmed = lines[i].trim();
-if (trimmed.startsWith('```')) {
-const fenceStart = i;
-const searchLines = [];
-i++;
-while (i < lines.length && !lines[i].trim().startsWith('```')) {
-searchLines.push(lines[i]);
-i++;
-}
-if (i >= lines.length) break;
-const fenceEnd = i;
-i++; // move past closing fence
+	while (i < lines.length) {
+		const trimmed = lines[i].trim();
+		if (trimmed.startsWith('```')) {
+			const fenceStart = i;
+			const searchLines = [];
 
-// ---------- CHANGED HERE ----------
-const sepIdx = lines.findIndex((line, idx) => 
-idx >= i && line.toLowerCase().includes(sep.toLowerCase())
-);
-// ----------------------------------
+			i++;
+			while (i < lines.length && !lines[i].trim().startsWith('```')) {
+				searchLines.push(stripInvisibleChars(lines[i]));
+				i++;
+			}
+			if (i >= lines.length) break;
 
-if (sepIdx === -1) break;
+			i++; // move past closing search fence
 
-// collect replacement lines
-const replLines = [];
-let replStart = sepIdx + 1;
-while (replStart < lines.length && lines[replStart].trim().startsWith('```')) {
-replStart++;
-}
-let replEnd = replStart;
-while (replEnd < lines.length && !lines[replEnd].trim().startsWith('```')) {
-replLines.push(lines[replEnd]);
-replEnd++;
-}
-const closingFenceIdx = replEnd;
+			const sepIdx = lines.findIndex(
+				(line, idx) => idx >= i && line.toLowerCase().includes(sep.toLowerCase())
+			);
+			if (sepIdx === -1) break;
 
-patterns.push({
-searchLines: searchLines.map(l => l.trim()),
-replLines: replLines.slice(),
-lineIndices: {
-searchStart: fenceStart,
-sepIdx: sepIdx,
-replEnd: closingFenceIdx
-}
-});
+			let replOpen = sepIdx + 1;
+			while (replOpen < lines.length && lines[replOpen].trim() === '') {
+				replOpen++;
+			}
+			if (replOpen >= lines.length || !lines[replOpen].trim().startsWith('```')) {
+				break;
+			}
 
-i = closingFenceIdx + 1;
-} else {
-i++;
-}
-}
+			const replLines = [];
+			let replEnd = replOpen + 1;
+			while (replEnd < lines.length && !lines[replEnd].trim().startsWith('```')) {
+				replLines.push(lines[replEnd]);
+				replEnd++;
+			}
+			if (replEnd >= lines.length) break;
 
-// fallback (no fences) – also use includes
-if (patterns.length === 0) {
-const sepIdx = lines.findIndex(line => line.toLowerCase().includes(sep.toLowerCase()));
-if (sepIdx !== -1) {
-const searchLines = lines.slice(0, sepIdx).map(l => l.trim()).filter(l => l.length > 0);
-const replLines = lines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
-if (searchLines.length > 0 && replLines.length > 0) {
-patterns.push({
-searchLines,
-replLines,
-lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
-});
-}
-}
-}
+			patterns.push({
+				searchLines: searchLines.map(l => l.trim()),
+				replLines: replLines.slice(),
+				lineIndices: {
+					searchStart: fenceStart,
+					sepIdx: sepIdx,
+					replEnd: replEnd
+				}
+			});
 
-return patterns;
+			i = replEnd + 1;
+		} else {
+			i++;
+		}
+	}
+
+	if (patterns.length === 0 && !lines.some(l => l.trim().startsWith('```'))) {
+		const sepIdx = lines.findIndex(line =>
+			line.toLowerCase().includes(sep.toLowerCase())
+		);
+		if (sepIdx !== -1) {
+			const searchLines = lines.slice(0, sepIdx)
+				.map(l => stripInvisibleChars(l).trim())
+				.filter(l => l.length > 0);
+			const replLines = lines.slice(sepIdx + 1)
+				.map(l => l.trim())
+				.filter(l => l.length > 0);
+			if (searchLines.length > 0 && replLines.length > 0) {
+				patterns.push({
+					searchLines,
+					replLines,
+					lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
+				});
+			}
+		}
+	}
+
+	return patterns;
 }
 
 function parseFenceInfos(lines) {
@@ -2341,12 +2362,13 @@ if (leftoverRulesSpan) leftoverRulesSpan.textContent = Math.max(0, totalRules - 
 }
 
 function analyseMode1(raw, sep) {
-const patterns = parseMode1Pattern(raw, sep) || [];
-const lines = norm(raw).split('\n');
-const { allPairs } = parseFenceInfos(lines);
-const outerCount = allPairs.filter(p => p.level === 0).length;
-const potential = Math.max(0, Math.floor(outerCount / 2) - patterns.length);
-return { valid: patterns.length, potential };
+    const patterns = parseMode1Pattern(raw, sep) || [];
+    const lines = norm(raw).split('\n');
+    const { allPairs } = parseFenceInfos(lines);
+    // Count all fence pairs (not only those with level === 0)
+    const totalPairs = allPairs.length;
+    const potential = Math.max(0, Math.floor(totalPairs / 2) - patterns.length);
+    return { valid: patterns.length, potential };
 }
 
 function clearCaches() {
