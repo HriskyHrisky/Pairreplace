@@ -1,0 +1,2790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Text Replacement – Template Fill (Order‑Preserving)</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f6f8fa; font-family: 'Inter', system-ui, sans-serif; padding: 30px 16px; color: #1e293b; min-height: 100vh; display: flex; justify-content: center; }
+.app { max-width: 1100px; width: 100%; background: #fff; border-radius: 24px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08); padding: 24px 28px 32px; }
+h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
+.global-bar { background: #f1f5f9; border-radius: 14px; padding: 16px; display: flex; flex-wrap: wrap; align-items: stretch; gap: 16px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+.toggle-group { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; min-width: 220px; flex: 1; }
+.group-title { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.child-toggle { padding-left: 16px; border-left: 2px solid #e2e8f0; margin-left: 4px; }
+.global-item { display: flex; align-items: center; gap: 6px 10px; font-size: 14px; font-weight: 500; color: #334155; flex-wrap: wrap; }
+.global-item label { font-weight: 400; color: #475569; }
+.global-item input[type="range"] { flex: 1; max-width: 300px; accent-color: #3b82f6; cursor: pointer; }
+.global-item .val { min-width: 36px; font-weight: 600; color: #0f172a; }
+.toggle-wrap { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; cursor: pointer; user-select: none; transition: opacity 0.2s; }
+.toggle-wrap input[type="checkbox"] { width: 18px; height: 18px; accent-color: #3b82f6; cursor: pointer; }
+.toggle-wrap input[type="checkbox"]:disabled { accent-color: #94a3b8; cursor: not-allowed; }
+select { padding: 4px 8px; border-radius: 8px; border: 1.5px solid #d1d9e6; font-size: 14px; background: #fff; }
+.mode-tabs { display: flex; gap: 4px; background: #f1f5f9; border-radius: 14px; padding: 4px; margin-bottom: 18px; border: 1px solid #e2e8f0; }
+.mode-tab { flex: 1; border: none; background: transparent; padding: 10px 12px; border-radius: 10px; font-size: 15px; font-weight: 500; color: #64748b; cursor: pointer; transition: all 0.2s; text-align: center; }
+.mode-tab.active { background: #fff; color: #0f172a; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+.textarea-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 14px; }
+.textarea-box { display: flex; flex-direction: column; }
+.textarea-box label { font-size: 14px; font-weight: 600; margin-bottom: 5px; color: #1e293b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+.textarea-box label .pattern-extras { font-weight: 400; font-size: 13px; color: #64748b; background: #f1f5f9; padding: 1px 12px; border-radius: 20px; white-space: nowrap; }
+.pattern-line-badge { font-size: 13px; font-weight: 500; color: #334155; background: #eef2ff; padding: 1px 12px; border-radius: 20px; white-space: nowrap; }
+.textarea-box textarea { flex: 1; min-height: 170px; padding: 12px 16px; border-radius: 14px; border: 1.5px solid #d1d9e6; font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical; transition: border 0.15s; background: #fafbfc; color: #0f172a; tab-size: 2; }
+.textarea-box textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.10); background: #fff; }
+.stats-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
+.stat-badge { background: #fff; padding: 2px 12px; border-radius: 30px; font-size: 13px; font-weight: 500; border: 1px solid #d1d9e6; white-space: nowrap; }
+.stat-badge span { color: #0f172a; font-weight: 700; }
+.mode-controls { background: #f8fafc; border-radius: 14px; padding: 12px 18px; margin: 2px 0 14px 0; border: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.mode-controls .group { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.mode-controls label { font-size: 14px; font-weight: 500; color: #334155; display: flex; align-items: center; gap: 4px; }
+.mode-controls input[type="text"], .mode-controls input[type="number"] { padding: 4px 10px; border-radius: 10px; border: 1.5px solid #d1d9e6; font-size: 14px; width: 120px; background: #fff; transition: border 0.15s; font-family: 'JetBrains Mono', monospace; }
+.mode-controls input[type="text"]:focus, .mode-controls input[type="number"]:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.10); }
+.mode-controls input[type="number"] { width: 70px; }
+.mode-hint { font-size: 13px; color: #64748b; margin: 0 0 10px 4px; font-weight: 400; }
+.hidden { display: none !important; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
+.btn { padding: 9px 24px; border-radius: 40px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; background: #eef2f6; color: #1e293b; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
+.btn-success { background: #22c55e; color: #fff; }
+.btn-success:hover { background: #16a34a; }
+.btn-outline { background: transparent; border: 1.5px solid #d1d9e6; }
+.btn-outline:hover { background: #f1f5f9; }
+.footer-hint { margin-top: 16px; font-size: 13px; color: #94a3b8; text-align: center; border-top: 1px solid #eef2f6; padding-top: 16px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+.status-msg { margin-top: 10px; padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; text-align: center; }
+.status-msg.warning { background: #fef3c7; color: #92400e; }
+.status-msg.info { background: #e0f2fe; color: #075985; }
+.match-details { margin-top: 14px; background: #f8fafc; border-radius: 14px; border: 1px solid #e2e8f0; padding: 12px 16px; max-height: 300px; overflow-y: auto; font-size: 13px; font-family: 'JetBrains Mono', monospace; color: #1e293b; }
+.match-details table { width: 100%; border-collapse: collapse; }
+.match-details th { text-align: left; font-weight: 600; color: #475569; padding-bottom: 4px; border-bottom: 1px solid #d1d9e6; }
+.match-details td { padding: 3px 0; border-bottom: 1px solid #eef2f6; }
+.match-details .similarity-green { color: #16a34a; font-weight: 600; }
+.match-details .similarity-amber { color: #d97706; font-weight: 600; }
+.match-details .similarity-red { color: #dc2626; font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width:720px) {
+.app { padding: 16px; }
+.textarea-grid { grid-template-columns: 1fr; gap: 12px; }
+.global-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+.mode-controls { flex-direction: column; align-items: stretch; gap: 8px; }
+.actions { flex-direction: column; }
+.actions .btn { width: 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>🔄 Text Replacement <small>template fill – order preserved</small></h1>
+
+<h2 class="sr-only">Global Settings</h2>
+<div class="global-bar">
+<div class="global-item" style="width:100%; margin-bottom:10px;">
+<label for="similarityRange">Similarity threshold</label>
+<input type="range" id="similarityRange" min="0" max="100" value="80" />
+<span class="val" id="similarityVal">80%</span>
+</div>
+
+<div class="toggle-group">
+<span class="group-title">ELLIPSIS WILDCARD</span>
+<div class="toggle-wrap" id="ellipsisWildcardWrap">
+<input type="checkbox" id="ellipsisWildcard" checked />
+<label for="ellipsisWildcard">🌿 Enable … as wildcard</label>
+</div>
+<div class="toggle-wrap child-toggle" id="greedyEllipsisWrap">
+<input type="checkbox" id="greedyEllipsis" checked title="If ON, tries to match as many lines as possible (last valid anchor). If OFF, matches as few as possible (first valid anchor)." />
+<label for="greedyEllipsis">🠚 Longest match first</label>
+</div>
+<div class="toggle-wrap child-toggle" id="lineWildcardWrap">
+<input type="checkbox" id="lineWildcard" title="If ON, any line that contains … is treated as a whole‑line wildcard, capturing the entire content line." />
+<label for="lineWildcard">📄 Full‑line wildcard</label>
+</div>
+</div>
+
+<div class="toggle-group">
+<span class="group-title">RULES &amp; SCOPE</span>
+<div class="toggle-wrap">
+<input type="checkbox" id="lockedPattern" />
+<label for="lockedPattern">📌 Keep used rules in textarea</label>
+</div>
+<div class="toggle-wrap" style="margin-top: 8px;">
+<input type="checkbox" id="allowAmbiguityToggle" checked title="If ON, applies each rule only once (to the best match). If OFF, applies to all valid matches in the content." />
+<label for="allowAmbiguityToggle">⏸️ Apply once</label>
+</div>
+<div class="toggle-wrap" style="margin-top: 8px;">
+<input type="checkbox" id="organizeModeToggle" />
+<label for="organizeModeToggle" title="Enforces stricter matching thresholds to prevent wildcard bleed.">🗂️ Organize mode (strict anchor matching)</label>
+</div>
+<div class="toggle-wrap" style="margin-top: 8px;">
+<input type="checkbox" id="interpretEscapesToggle" />
+<label for="interpretEscapesToggle">🔤 Interpret \n, \t, \r as control chars</label>
+</div>
+<div class="toggle-wrap" style="margin-top: 8px;">
+<input type="checkbox" id="showMarkersToggle" checked />
+<label for="showMarkersToggle">🚩 Show markers for ambiguity</label>
+</div>
+</div>
+</div>
+
+<div class="mode-tabs" role="tablist">
+<button class="mode-tab active" data-mode="1" role="tab" aria-selected="true" id="tab-mode1">🔹 Mode 1 · Fenced + Separator</button>
+<button class="mode-tab" data-mode="2" role="tab" aria-selected="false" id="tab-mode2">
+🔸 Mode 2 · Block matching
+</button>
+</div>
+
+<h2 class="sr-only">Content and Rules</h2>
+<div class="textarea-grid">
+<div class="textarea-box">
+<label>Content (textarea 1)
+<span class="pattern-extras"><span class="count" id="contentCharCount">0 chars</span><span class="pattern-line-badge" id="contentLineBadge">0 lines</span></span>
+</label>
+<textarea id="contentArea" placeholder="Paste content…"></textarea>
+</div>
+<div class="textarea-box">
+<label>Rules (textarea 2)
+<span class="pattern-extras"><span class="count" id="patternCharCount">0 chars</span><span class="pattern-line-badge" id="patternLineBadge">0 lines</span></span>
+</label>
+<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated by empty lines (first k non-empty lines = signature, rest = replacement)"></textarea>
+<div class="stats-row">
+<span class="stat-badge">✅ Replacements <span id="appliedCount">0</span></span>
+<span class="stat-badge">📋 Rules <span id="totalRules">0</span></span>
+<span class="stat-badge">✔️ Used <span id="usedRules">0</span></span>
+<span class="stat-badge">⏳ Leftover <span id="leftoverRules">0</span></span>
+<span id="mode1Stats" class="stat-badge">🔹 Valid: <span id="patternValid">0</span> / Potential: <span id="patternPotential">0</span></span>
+<span id="mode2BlockCount" class="stat-badge hidden">🧩 Blocks: <span id="blockCountVal">0</span></span>
+</div>
+</div>
+</div>
+
+<div id="mode1Controls" class="mode-controls">
+<div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace" /></label></div>
+<div class="group"><label>Min matched lines: <input type="number" id="mode1Threshold" value="2" min="1" max="20" aria-label="Minimum matched lines for Mode 1" /></label></div>
+</div>
+<div id="mode2Controls" class="mode-controls hidden">
+<div class="group"><label>Min matched lines: <input type="number" id="mode2Threshold" value="2" min="1" max="20" aria-label="Minimum matched lines for Mode 2" /></label></div>
+<div class="group"><label>Similarity % <input type="number" id="mode2Sim" value="80" min="0" max="100" aria-label="Similarity percentage for Mode 2" /></label></div>
+<div class="group"><label>Unreliable chars tolerance: <input type="number" id="mode2Tolerance" value="0" min="0" max="20" aria-label="Unreliable characters tolerance" /></label></div>
+</div>
+<div class="mode-hint" id="modeHint">
+<span id="modeHintText"></span>
+<span id="modeStatusBadge" style="font-weight:600; margin-left:10px;"></span>
+</div>
+<div class="actions">
+<button type="button" class="btn btn-success" id="replaceBtn">⚡ Replace All</button>
+<button type="button" class="btn btn-outline" id="resetBtn">↺ Reset</button>
+<button type="button" class="btn btn-outline" id="swapBtn">⇆ Swap</button>
+</div>
+
+<div id="statusMessage" class="status-msg hidden" role="status" aria-live="polite"></div>
+<h2 class="sr-only">Match Report</h2>
+<div id="matchDetails" class="match-details hidden">
+<div style="font-weight:600; margin-bottom:6px;">📊 Match report</div>
+<div id="matchReport"></div>
+</div>
+<div class="footer-hint"><span>⋯ <strong>\…</strong> literal ellipsis, <strong>…</strong> wildcard. Greediness is controlled by the <strong>Longest match first</strong> toggle.</span></div>
+</div>
+<script>
+// jshint esversion: 11
+/* ================= DOM refs ================= */
+const contentArea = document.getElementById('contentArea');
+const patternArea = document.getElementById('patternArea');
+const similarityRange = document.getElementById('similarityRange');
+const similarityVal = document.getElementById('similarityVal');
+const appliedCountSpan = document.getElementById('appliedCount');
+const totalRulesSpan = document.getElementById('totalRules');
+const usedRulesSpan = document.getElementById('usedRules');
+const leftoverRulesSpan = document.getElementById('leftoverRules');
+const contentCharCount = document.getElementById('contentCharCount');
+const contentLineBadge = document.getElementById('contentLineBadge');
+const patternCharCount = document.getElementById('patternCharCount');
+const patternLineBadge = document.getElementById('patternLineBadge');
+const patternValid = document.getElementById('patternValid');
+const patternPotential = document.getElementById('patternPotential');
+const mode1Stats = document.getElementById('mode1Stats');
+const mode2BlockCount = document.getElementById('mode2BlockCount');
+const blockCountVal = document.getElementById('blockCountVal');
+const lockedPattern = document.getElementById('lockedPattern');
+const greedyEllipsis = document.getElementById('greedyEllipsis');
+const ellipsisWildcard = document.getElementById('ellipsisWildcard');
+const lineWildcard = document.getElementById('lineWildcard');
+const modeTabs = document.querySelectorAll('.mode-tab');
+const mode1Controls = document.getElementById('mode1Controls');
+const mode2Controls = document.getElementById('mode2Controls');
+const modeHint = document.getElementById('modeHint');
+const modeStatusBadge = document.getElementById('modeStatusBadge');
+const modeHintText = document.getElementById('modeHintText');
+const mode1Threshold = document.getElementById('mode1Threshold');
+const mode2Threshold = document.getElementById('mode2Threshold');
+const mode2Sim = document.getElementById('mode2Sim');
+const mode2Tolerance = document.getElementById('mode2Tolerance');
+const separatorInput = document.getElementById('separatorInput');
+const replaceBtn = document.getElementById('replaceBtn');
+const resetBtn = document.getElementById('resetBtn');
+const swapBtn = document.getElementById('swapBtn');
+const statusMsgEl = document.getElementById('statusMessage');
+const matchDetails = document.getElementById('matchDetails');
+const matchReport = document.getElementById('matchReport');
+const greedyEllipsisWrap = document.getElementById('greedyEllipsisWrap');
+const lineWildcardWrap = document.getElementById('lineWildcardWrap');
+const allowAmbiguityToggle = document.getElementById('allowAmbiguityToggle');
+const interpretEscapesToggle = document.getElementById('interpretEscapesToggle');
+const organizeModeToggle = document.getElementById('organizeModeToggle');
+const showMarkersToggle = document.getElementById('showMarkersToggle');
+
+
+const N_BOOKEND = 20;
+
+// -------------------- Global state --------------------
+let currentMode = 1;
+let lastAppliedCount = 0;
+let lastTotalRules = 0;
+let lastUsedCount = 0;
+let ellipsisWildcardEnabled = true;
+let lineWildcardEnabled = false;
+let showMarkers = true;
+let abortController = null;
+let statusTimeout = null;
+
+let protectBoundariesEnabled = true;
+let customIdentifierRegex = null;
+
+// Placeholders
+const PLACEHOLDER_PREFIX = `\u0000\u0001\u0002\u0003WILD${Math.random().toString(36).slice(2, 10)}\u0003\u0002\u0001\u0000`;
+const LITERAL_ELLIPSIS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'LEL';
+const LITERAL_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'LTD';
+const WILDCARD_ELLIPSIS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WEL';
+const WILDCARD_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WTD';
+const MARKER_LINE = '// ‼️';
+
+// -------------------- Utility functions (unchanged) --------------------
+function stripInvisibleChars(s) {
+return String(s ?? '').replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u00A0\u1680\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u3000\uFEFF]/g, '');
+}
+
+function collapseWS(s) {
+return stripInvisibleChars(String(s ?? '')).replace(/^[ \t]+|[ \t]+$/gm, '');
+}
+
+function norm(s) { return String(s ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'); }
+
+function interpretEscapes(str) {
+return str.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+}
+
+function stripMarkers(content) {
+const lines = norm(content).split('\n');
+return lines.filter(line => {
+const trimmed = line.trim();
+return !/^\/\/\s*‼️/.test(trimmed) && !line.includes(PLACEHOLDER_PREFIX);
+}).join('\n');
+}
+
+function normalizeEllipsis(text) {
+let s = String(text ?? '');
+s = s.replace(/\\\.\.\./g, LITERAL_THREE_DOTS_PLACEHOLDER);
+s = s.replace(/\\…/g, LITERAL_ELLIPSIS_PLACEHOLDER);
+s = s.replace(/\.\.\./g, WILDCARD_THREE_DOTS_PLACEHOLDER);
+s = s.replace(/…/g, WILDCARD_ELLIPSIS_PLACEHOLDER);
+return s;
+}
+
+function protectLiteralEllipsis(text) {
+let cleaned = String(text ?? '');
+cleaned = stripInvisibleChars(cleaned);
+cleaned = cleaned.replace(/\\\.\.\./g, LITERAL_THREE_DOTS_PLACEHOLDER);
+cleaned = cleaned.replace(/\\…/g, LITERAL_ELLIPSIS_PLACEHOLDER);
+if (ellipsisWildcardEnabled) {
+cleaned = cleaned.replace(/\.\.\./g, WILDCARD_THREE_DOTS_PLACEHOLDER);
+cleaned = cleaned.replace(/…/g, WILDCARD_ELLIPSIS_PLACEHOLDER);
+}
+return cleaned;
+}
+
+function restoreLiteralEllipsis(text) {
+return String(text ?? '')
+.split(LITERAL_THREE_DOTS_PLACEHOLDER).join('...')
+.split(LITERAL_ELLIPSIS_PLACEHOLDER).join('…');
+}
+
+function cleanupWildcardPlaceholders(text) {
+return String(text ?? '')
+.split(WILDCARD_ELLIPSIS_PLACEHOLDER).join('…')
+.split(WILDCARD_THREE_DOTS_PLACEHOLDER).join('...');
+}
+
+function normalizeRulesText(text) {
+return normalizeEllipsis(text);
+}
+
+function protectGlobalBoundaries(text) {
+if (!protectBoundariesEnabled || !ellipsisWildcardEnabled) return text;
+text = text.replace(/^(\s*)(\.{3}|…)/, '$1\\$2');
+text = text.replace(/(\.{3}|…)(\s*)$/, '\\$1$2');
+return text;
+}
+
+function normalizeForComparison(s) {
+return String(s ?? '')
+.replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u00A0\u1680\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u2060\u3000\uFEFF]/g, '')
+.replace(/[ \t]+/g, ' ')
+.trim()
+.toLowerCase();
+}
+
+// --- Identifier extraction (used only for fallback, not for Organize mapping) ---
+function extractIdentifierFromLine(line, customRegex) {
+if (!line) return null;
+const cleaned = collapseWS(String(line));
+if (customRegex) {
+const match = cleaned.match(customRegex);
+if (match) return match[1] || match[0];
+}
+const toolMatch = cleaned.match(/tool\s*\(\s*\[\s*['"]([^'"]+)['"]/);
+if (toolMatch) return toolMatch[1];
+const regex = /(?:const|let|var|function|class|def|fun|public|private|protected)\s+(\w+)|"(\w+)":|(\w+)\s*[:=]|(\w+)\s*\(/;
+const match = cleaned.match(regex);
+if (match) {
+for (let i = 1; i < match.length; i++) {
+if (match[i]) return match[i];
+}
+}
+const wordMatch = cleaned.match(/[a-zA-Z_]\w*/);
+return wordMatch ? wordMatch[0] : null;
+}
+
+// --- Tokenization (unchanged) ---
+const ELLIPSIS_UNICODE = '…';
+const ELLIPSIS_THREE_DOTS = '...';
+
+function isEllipsisMatch(str, index) {
+if (str.startsWith(ELLIPSIS_THREE_DOTS, index)) return ELLIPSIS_THREE_DOTS.length;
+if (str.startsWith(ELLIPSIS_UNICODE, index)) return ELLIPSIS_UNICODE.length;
+return 0;
+}
+
+function tokenizeEllipses(rawLine, isWildcardEnabled = true, isReplacementMode = false) {
+const cleaned = stripInvisibleChars(String(rawLine ?? ''));
+const tokens = [];
+let i = 0;
+let literalBuffer = '';
+let braceDepth = 0, parenDepth = 0, inString = false, stringChar = '';
+let escaped = false;
+
+while (i < cleaned.length) {
+const char = cleaned[i];
+const next = cleaned[i + 1] || '';
+
+if (!inString && (char === '"' || char === "'" || char === '`')) {
+inString = true;
+stringChar = char;
+literalBuffer += char;
+i++;
+continue;
+}
+if (inString) {
+literalBuffer += char;
+if (escaped) { escaped = false; }
+else if (char === '\\') { escaped = true; }
+else if (char === stringChar) { inString = false; }
+i++;
+continue;
+}
+
+if (char === '{') { braceDepth++; literalBuffer += char; i++; continue; }
+if (char === '}') { braceDepth--; literalBuffer += char; i++; continue; }
+if (char === '(') { parenDepth++; literalBuffer += char; i++; continue; }
+if (char === ')') { parenDepth--; literalBuffer += char; i++; continue; }
+
+if (char === '\\' && i + 1 < cleaned.length) {
+const escLen = isEllipsisMatch(cleaned, i + 1);
+if (escLen > 0) {
+if (literalBuffer) { tokens.push({ type: 'literal', text: literalBuffer }); literalBuffer = ''; }
+tokens.push({ type: 'literal', text: cleaned.substring(i + 1, i + 1 + escLen), escaped: true });
+i += 1 + escLen;
+continue;
+}
+}
+
+const ellLen = isEllipsisMatch(cleaned, i);
+if (ellLen > 0) {
+const isTopLevel = !inString && braceDepth === 0 && parenDepth === 0;
+const shouldBeWildcard = isWildcardEnabled && (isTopLevel || isReplacementMode);
+if (literalBuffer) { tokens.push({ type: 'literal', text: literalBuffer }); literalBuffer = ''; }
+const tokenType = shouldBeWildcard ? 'wildcard_candidate' : 'literal';
+tokens.push({ type: tokenType, text: cleaned.substring(i, i + ellLen), raw: cleaned.substring(i, i + ellLen) });
+i += ellLen;
+} else {
+literalBuffer += char;
+i++;
+}
+}
+if (literalBuffer) tokens.push({ type: 'literal', text: literalBuffer });
+return tokens;
+}
+
+function resolveSearchWildcards(tokens, isMode2, isLineWildcardEnabled) {
+if (!ellipsisWildcardEnabled) {
+return tokens.map(t => t.type === 'wildcard_candidate' 
+? { type: 'literal', text: t.raw || t.value, preserveRaw: true } 
+: t);
+}
+
+const resolved = tokens.map(t => {
+if (t.type === 'wildcard_candidate') {
+return { type: 'wildcard', raw: t.raw, greedy: false };
+}
+return { ...t };
+});
+
+const merged = [];
+for (const tok of resolved) {
+if (tok.type === 'wildcard' && merged.length > 0 && merged[merged.length - 1].type === 'wildcard') {
+continue;
+}
+merged.push(tok);
+}
+const final = [];
+for (const tok of merged) {
+if (tok.type === 'literal' && final.length > 0 && final[final.length - 1].type === 'literal') {
+final[final.length - 1].text += tok.text;
+} else {
+final.push({ ...tok });
+}
+}
+return final;
+}
+
+// -------------------- Similarity (unchanged) --------------------
+function similarityAnchor(a, b, isWildcardMode = false) {
+const aRestored = restoreLiteralEllipsis(a);
+const bRestored = restoreLiteralEllipsis(b);
+
+const normA = normalizeForComparison(aRestored);
+const normB = normalizeForComparison(bRestored);
+
+if (normA === normB) return 100;
+if (normA.length === 0 || normB.length === 0) return 0;
+
+const maxLen = Math.max(normA.length, normB.length);
+
+if (isWildcardMode) {
+return compareWithWildcards(normA, normB);
+}
+
+const lenA = normA.length, lenB = normB.length;
+let prev = new Array(lenB + 1).fill(0);
+let curr = new Array(lenB + 1).fill(0);
+for (let i = 1; i <= lenA; i++) {
+for (let j = 1; j <= lenB; j++) {
+if (normA[i - 1] === normB[j - 1]) {
+curr[j] = prev[j - 1] + 1;
+} else {
+curr[j] = Math.max(prev[j], curr[j - 1]);
+}
+}
+[prev, curr] = [curr, prev];
+curr.fill(0);
+}
+const lcsLength = prev[lenB];
+const sim = Math.round((lcsLength / maxLen) * 100);
+return Math.max(0, Math.min(100, sim));
+}
+
+function compareWithWildcards(a, b) {
+const tokensA = tokenizeEllipses(a, true, false);
+const tokensB = tokenizeEllipses(b, true, false);
+const resolvedA = resolveSearchWildcards(tokensA, false, false);
+const resolvedB = resolveSearchWildcards(tokensB, false, false);
+
+let validChars = 0;
+let totalCompared = 0;
+let i = 0, j = 0;
+
+while (i < resolvedA.length && j < resolvedB.length) {
+const tokA = resolvedA[i];
+const tokB = resolvedB[j];
+
+if ((tokA.type === 'wildcard') || (tokB.type === 'wildcard')) {
+if (tokA.type === 'wildcard') i++;
+if (tokB.type === 'wildcard') j++;
+continue;
+}
+
+if (tokA.type === 'literal' && tokB.type === 'literal') {
+const aText = tokA.text || '';
+const bText = tokB.text || '';
+const minLen = Math.min(aText.length, bText.length);
+for (let k = 0; k < minLen; k++) {
+totalCompared++;
+if (aText[k] === bText[k]) validChars++;
+}
+if (aText.length !== bText.length) {
+totalCompared += Math.abs(aText.length - bText.length);
+}
+i++;
+j++;
+} else {
+i++;
+j++;
+}
+}
+
+return totalCompared > 0 ? (validChars / totalCompared) * 100 : 100;
+}
+
+function compareWithTolerance(a, b, threshold, tolerance, isWildcardMode = false, startCol = 0) {
+if (startCol > 0 && !a.includes('\n')) {
+a = a.slice(startCol);
+}
+return similarityAnchor(a, b, isWildcardMode);
+}
+
+// -------------------- N‑gram indexing (unchanged) --------------------
+let workVersion = 0;
+let cachedNgramIndex = null;
+let cachedNgramN = 0;
+let indexDirty = true;
+
+function buildNgramIndex(lines, n) {
+const index = new Map();
+for (let i = 0; i < lines.length; i++) {
+const normalizedLine = normalizeForComparison(restoreLiteralEllipsis(lines[i]));
+const grams = extractNgrams(normalizedLine, n);
+for (const g of grams) {
+if (!index.has(g)) index.set(g, []);
+index.get(g).push(i);
+}
+}
+return index;
+}
+
+function getNgramN(searchLines) {
+const nonEmpty = searchLines.filter(l => l.trim().length > 0);
+if (nonEmpty.length === 0) return N_BOOKEND;
+const totalLen = nonEmpty.reduce((sum, l) => sum + l.length, 0);
+const avg = totalLen / nonEmpty.length;
+let n = Math.floor(avg / 2);
+n = Math.max(2, Math.min(N_BOOKEND, n));
+return n;
+}
+
+function extractNgrams(text, n) {
+const cleaned = normalizeForComparison(text);
+const grams = new Set();
+if (cleaned.length < n) return grams;
+for (let i = 0; i <= cleaned.length - n; i++) {
+grams.add(cleaned.substring(i, i + n));
+}
+return grams;
+}
+
+function getNgramIndex(work, n) {
+if (indexDirty || cachedNgramN !== n) {
+cachedNgramIndex = buildNgramIndex(work, n);
+cachedNgramN = n;
+indexDirty = false;
+}
+return cachedNgramIndex;
+}
+
+function markIndexDirty() {
+indexDirty = true;
+}
+
+// -------------------- Pattern classification (unchanged) --------------------
+function classifySearchLine(line, lineWildcardEnabled) {
+const original = String(line ?? '');
+if (!ellipsisWildcardEnabled) {
+return { type: 'literal_line', text: restoreLiteralEllipsis(original).trim() };
+}
+const protectedLine = normalizeEllipsis(original);
+const trimmed = protectedLine.trim();
+
+const onlyEllipsis = /^(?:\s*)(?:\.{3}|…)(?:\s*)$/.test(trimmed);
+if (onlyEllipsis) {
+return { type: 'whole_wildcard', greedy: false };
+}
+
+if (trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER || trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER) {
+return { type: 'whole_wildcard', greedy: false };
+}
+
+const onlyWildcards = new RegExp(`^(?:\\s*(?:${WILDCARD_ELLIPSIS_PLACEHOLDER}|${WILDCARD_THREE_DOTS_PLACEHOLDER})\\s*)+$`).test(protectedLine);
+if (onlyWildcards) {
+return { type: 'whole_wildcard', greedy: false };
+}
+
+if (protectedLine.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) || protectedLine.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)) {
+const parts = protectedLine.split(new RegExp(`(${WILDCARD_ELLIPSIS_PLACEHOLDER}|${WILDCARD_THREE_DOTS_PLACEHOLDER})`));
+const tokens = [];
+for (const part of parts) {
+if (!part) continue;
+if (part === WILDCARD_ELLIPSIS_PLACEHOLDER || part === WILDCARD_THREE_DOTS_PLACEHOLDER) {
+tokens.push({ type: 'wildcard', greedy: false });
+} else {
+tokens.push({ type: 'literal', text: restoreLiteralEllipsis(part) });
+}
+}
+return { type: 'inline_pattern', tokens };
+}
+
+return { type: 'literal_line', text: restoreLiteralEllipsis(protectedLine).trim() };
+}
+
+function buildPatternItems(searchLines, lineWildcardEnabled) {
+const wildcardState = ellipsisWildcardEnabled;
+const protectedLines = searchLines.map(line =>
+wildcardState ? normalizeEllipsis(line) : protectLiteralEllipsis(line)
+);
+const items = [];
+let totalWildcards = 0;
+let literalBuffer = [];
+const flushLiteral = () => {
+if (literalBuffer.length > 0) {
+items.push({ type: 'literal_block', text: literalBuffer.join('\n') });
+literalBuffer = [];
+}
+};
+for (const line of protectedLines) {
+const classification = classifySearchLine(line, lineWildcardEnabled);
+if (classification.type === 'literal_line') {
+flushLiteral();
+literalBuffer.push(classification.text);
+} else if (classification.type === 'whole_wildcard') {
+flushLiteral();
+if (items.length > 0 && items[items.length - 1].type === 'wildcard') continue;
+items.push({ type: 'wildcard', greedy: false });
+totalWildcards++;
+} else if (classification.type === 'inline_pattern') {
+flushLiteral();
+const wcCount = classification.tokens.filter(t => t.type === 'wildcard').length;
+totalWildcards += wcCount;
+items.push({ type: 'inline_pattern', tokens: classification.tokens, identifier: null });
+}
+}
+flushLiteral();
+return { items, totalWildcards };
+}
+
+// -------------------- Inline matching (TOLERANT version) (unchanged) --------------------
+function buildFlexibleRegex(literal) {
+let escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+escaped = escaped.replace(/\s+/g, '\\s*');
+return new RegExp(escaped, 'gi');
+}
+
+function findLiteralTolerant(text, startPos, literal, greedy) {
+const searchText = text.slice(startPos);
+const regex = buildFlexibleRegex(literal);
+const matches = [];
+let m;
+while ((m = regex.exec(searchText)) !== null) {
+matches.push({ index: m.index, length: m[0].length });
+if (m.index === regex.lastIndex) regex.lastIndex++;
+}
+if (matches.length === 0) return { found: false };
+const chosen = greedy ? matches[matches.length - 1] : matches[0];
+return { found: true, pos: startPos + chosen.index, matchedLength: chosen.length };
+}
+function findLiteralExactFlexible(text, startPos, literal, greedy = false) {
+const searchText = text.slice(startPos);
+let escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+escaped = escaped.replace(/[ \t]+/g, '[ \\t]*'); // only spaces/tabs, not newlines
+const regex = new RegExp(escaped, 'gi');
+const matches = [];
+let m;
+while ((m = regex.exec(searchText)) !== null) {
+matches.push({ index: m.index, length: m[0].length });
+if (m.index === regex.lastIndex) regex.lastIndex++;
+}
+if (matches.length === 0) return { found: false };
+const chosen = greedy ? matches[matches.length - 1] : matches[0];
+return { found: true, pos: startPos + chosen.index, matchedLength: chosen.length };
+}
+function matchLiteralAtPosition(text, pos, literal) {
+const sub = text.slice(pos);
+const regex = buildFlexibleRegex(literal);
+const match = regex.exec(sub);
+if (!match || match.index !== 0) return { success: false };
+return { success: true, endPos: pos + match[0].length };
+}
+
+function matchInlineWildcardTokens(contentStr, tokens, isOrganizeMode = false, greedy = false, threshold = 80, tolerance = 0, startPos = 0) {
+const haystack = contentStr.slice(startPos);
+const filteredTokens = tokens.filter(t => t.type !== 'literal' || t.text !== '');
+if (filteredTokens.length === 0) {
+return { success: true, sim: 100, captured: [], matchText: '', index: startPos, endIndex: startPos, linesConsumed: 0, endCol: 0 };
+}
+
+let pos = 0;
+const captures = [];
+let i = 0;
+
+while (i < filteredTokens.length) {
+const tok = filteredTokens[i];
+if (tok.type === 'wildcard') {
+let nextIdx = i + 1;
+while (nextIdx < filteredTokens.length && filteredTokens[nextIdx].type === 'wildcard') nextIdx++;
+if (nextIdx < filteredTokens.length) {
+const nextLit = filteredTokens[nextIdx];
+const result = findLiteralTolerant(haystack, pos, nextLit.text, greedy);
+if (!result.found) return null;
+captures.push(haystack.substring(pos, result.pos));
+pos = result.pos + result.matchedLength;
+i = nextIdx;
+} else {
+captures.push(haystack.substring(pos));
+pos = haystack.length;
+break;
+}
+} else {
+const result = matchLiteralAtPosition(haystack, pos, tok.text);
+if (!result.success) return null;
+pos = result.endPos;
+i++;
+}
+}
+
+const matchedStr = haystack.substring(0, pos);
+let reconstructed = '';
+let capIdx = 0;
+for (const tok of filteredTokens) {
+if (tok.type === 'literal') reconstructed += tok.text;
+else {
+reconstructed += (captures[capIdx] || '');
+capIdx++;
+}
+}
+const sim = isOrganizeMode ? (reconstructed === matchedStr ? 100 : 0) :
+compareWithTolerance(reconstructed, matchedStr, threshold, 0);
+if (sim < threshold) return null;
+
+const linesConsumed = matchedStr.split('\n').length - 1;
+const lastNewlineIdx = matchedStr.lastIndexOf('\n');
+const endCol = (lastNewlineIdx === -1) ? matchedStr.length : matchedStr.length - lastNewlineIdx - 1;
+
+return {
+success: true,
+sim,
+captured: captures,
+matchText: matchedStr,
+index: startPos,
+endIndex: startPos + pos,
+linesConsumed,
+endCol
+};
+}
+
+// -------------------- Bookend helpers (unchanged) --------------------
+function buildAcronym(text) {
+const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+if (words.length <= 9) return null;
+return words.map(w => w[0]).join('').toLowerCase();
+}
+
+function extractFixedNgramsWithPositions(text, n = 5) {
+const cleaned = normalizeForComparison(text);
+const grams = [];
+for (let i = 0; i <= cleaned.length - n; i++) {
+grams.push({ gram: cleaned.substring(i, i + n), pos: i });
+}
+return grams;
+}
+
+function getBookendAnchors(items) {
+const literalLines = [];
+
+for (const item of items) {
+if (item.type === 'literal_block') {
+const lines = item.text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+literalLines.push(...lines);
+} else if (item.type === 'inline_pattern') {
+for (const token of item.tokens) {
+if (token.type === 'literal' && token.text.trim().length > 0) {
+literalLines.push(token.text.trim());
+}
+}
+}
+}
+
+if (literalLines.length < 2) return null;
+
+const firstLine = literalLines[0];
+const lastLine = literalLines[literalLines.length - 1];
+
+if (!firstLine || !lastLine) return null;
+return { firstLine, lastLine };
+}
+
+function findCandidateStarts(contentLines, anchors, ngramIndex, n = 20) {
+if (!anchors || (!anchors.firstLine && !anchors.lastLine)) return [];
+
+const tryAnchor = (anchorText) => {
+if (!anchorText) return [];
+const cleanAnchor = collapseWS(anchorText);
+
+const exactMatches = [];
+for (let i = 0; i < contentLines.length; i++) {
+if (collapseWS(contentLines[i]) === cleanAnchor) exactMatches.push(i);
+}
+if (exactMatches.length > 0) return exactMatches;
+
+const anchorAcronym = buildAcronym(cleanAnchor);
+if (anchorAcronym) {
+const acronymMatches = [];
+for (let i = 0; i < contentLines.length; i++) {
+const lineAcronym = buildAcronym(collapseWS(contentLines[i]));
+if (lineAcronym === anchorAcronym) acronymMatches.push(i);
+}
+if (acronymMatches.length > 0) return acronymMatches;
+}
+
+const anchorGrams = extractFixedNgramsWithPositions(cleanAnchor, 5);
+if (anchorGrams.length > 0) {
+const candidateMap = new Map();
+for (let i = 0; i < contentLines.length; i++) {
+const lineClean = normalizeForComparison(contentLines[i]);
+const lineGrams = extractFixedNgramsWithPositions(lineClean, 5);
+for (const aGram of anchorGrams) {
+for (const lGram of lineGrams) {
+if (aGram.gram === lGram.gram) {
+const posDiff = Math.abs(aGram.pos - lGram.pos);
+if (posDiff <= 10) {
+if (!candidateMap.has(i)) candidateMap.set(i, []);
+candidateMap.get(i).push(posDiff);
+}
+}
+}
+}
+}
+if (candidateMap.size > 0) {
+const scored = [];
+for (const [idx, diffs] of candidateMap) {
+const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+scored.push({ idx, score: avgDiff });
+}
+scored.sort((a, b) => a.score - b.score);
+const result = scored.slice(0, 10).map(s => s.idx);
+if (result.length > 0) return result;
+}
+}
+
+const grams = extractNgrams(anchorText, n);
+const ngramCandidates = new Set();
+for (const gram of grams) {
+const occurrences = ngramIndex.get(gram);
+if (!occurrences) continue;
+for (const lineIdx of occurrences) ngramCandidates.add(lineIdx);
+}
+if (ngramCandidates.size > 0) return [...ngramCandidates];
+
+const anchorWords = cleanAnchor.split(/\s+/).map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toLowerCase()).filter(Boolean);
+if (anchorWords.length > 0) {
+const targetWord = anchorWords[0];
+const wordCandidates = [];
+for (let i = 0; i < contentLines.length; i++) {
+if (contentLines[i].toLowerCase().includes(targetWord)) wordCandidates.push(i);
+}
+if (wordCandidates.length > 0) return wordCandidates;
+}
+
+return [];
+};
+
+let candidates = tryAnchor(anchors.firstLine);
+if (candidates.length === 0 && anchors.lastLine && anchors.lastLine !== anchors.firstLine) {
+candidates = tryAnchor(anchors.lastLine);
+}
+return candidates.length > 0 ? candidates.sort((a, b) => a - b) : [];
+}
+
+function findLiteralInLine(lineText, startCol, literal) {
+if (!lineText || literal === '') return -1;
+let pos = lineText.indexOf(literal, startCol);
+if (pos !== -1) return pos;
+const collapseText = lineText.replace(/[ \t]+/g, ' ');
+const collapseLit = literal.replace(/[ \t]+/g, ' ');
+const searchFrom = startCol;
+const sub = collapseText.substring(searchFrom);
+const idx = sub.indexOf(collapseLit);
+if (idx === -1) return -1;
+const pattern = literal.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+const regex = new RegExp(pattern, 'i');
+const match = lineText.slice(searchFrom).match(regex);
+if (match) {
+return searchFrom + match.index;
+}
+return -1;
+}
+
+// -------------------- matchPatternLineBased (with fixed cursor advancement) (unchanged) --------------------
+function matchPatternLineBased(contentLines, start, items, threshold, greedy, tolerance, startCol = 0) {
+let cursorLine = start;
+let cursorCol = startCol;
+let captured = []; // { itemIndex, captures }
+let sims = [];
+
+for (let i = 0; i < items.length; i++) {
+const item = items[i];
+
+if (item.type === 'literal_block') {
+const lines = item.text.split('\n');
+if (cursorLine + lines.length > contentLines.length) {
+return { success: false };
+}
+let blockOk = true;
+for (let j = 0; j < lines.length; j++) {
+const sourceLine = contentLines[cursorLine + j];
+const patLine = lines[j];
+const colToUse = (j === 0) ? cursorCol : 0;
+const sim = compareWithTolerance(sourceLine, patLine, threshold, 0, false, colToUse);
+if (sim < threshold) { blockOk = false; break; }
+sims.push(sim);
+}
+if (!blockOk) return { success: false };
+cursorLine += lines.length;
+cursorCol = 0;
+}
+
+else if (item.type === 'inline_pattern') {
+if (cursorLine >= contentLines.length) return { success: false };
+let remaining = contentLines[cursorLine].slice(cursorCol);
+for (let l = cursorLine + 1; l < contentLines.length; l++) {
+remaining += '\n' + contentLines[l];
+}
+const result = matchInlineWildcardTokens(
+remaining,
+item.tokens,
+false,
+greedy,
+threshold,
+0,
+0
+);
+if (!result || !result.success) return { success: false };
+sims.push(result.sim);
+captured.push({ itemIndex: i, captures: result.captured });
+
+// Advance cursor correctly using linesConsumed and endCol
+if (result.linesConsumed > 0) {
+cursorLine += result.linesConsumed;
+cursorCol = result.endCol;
+} else {
+const newCol = cursorCol + result.endIndex;
+if (newCol >= contentLines[cursorLine].length) {
+cursorLine++;
+cursorCol = 0;
+} else {
+cursorCol = newCol;
+}
+}
+}
+
+else if (item.type === 'wildcard') {
+const nextItem = items.slice(i + 1).find(it => it.type !== 'wildcard');
+if (!nextItem) {
+captured.push({ itemIndex: i, captures: contentLines.slice(cursorLine).map(String) });
+cursorLine = contentLines.length;
+break;
+}
+const candidates = findAnchorLinePositions(contentLines, cursorLine, nextItem, threshold, 0, cursorCol);
+if (candidates.length === 0) return { success: false };
+const anchorStart = greedy ? candidates[candidates.length - 1] : candidates[0];
+captured.push({ itemIndex: i, captures: contentLines.slice(cursorLine, anchorStart).map(String) });
+cursorLine = anchorStart;
+cursorCol = 0;
+}
+}
+
+const avgSim = sims.length ? sims.reduce((a, b) => a + b, 0) / sims.length : 100;
+return {
+success: true,
+match: {
+end: cursorLine,
+captured,
+avgSim,
+minSim: sims.length ? Math.min(...sims) : 100
+}
+};
+}
+
+function findAnchorLinePositions(contentLines, fromIdx, anchorItem, threshold, tolerance, startCol = 0) {
+const positions = [];
+
+if (anchorItem.type === 'literal_block') {
+const lines = anchorItem.text.split('\n');
+for (let i = fromIdx; i <= contentLines.length - lines.length; i++) {
+let ok = true;
+for (let j = 0; j < lines.length; j++) {
+const colToUse = (j === 0) ? startCol : 0;
+const sim = compareWithTolerance(contentLines[i + j], lines[j], threshold, 0, false, colToUse);
+if (sim < threshold) { ok = false; break; }
+}
+if (ok) positions.push(i);
+}
+} else if (anchorItem.type === 'inline_pattern') {
+for (let i = fromIdx; i < contentLines.length; i++) {
+let remaining = contentLines[i].slice(startCol);
+for (let l = i + 1; l < contentLines.length; l++) {
+remaining += '\n' + contentLines[l];
+}
+const res = matchInlineWildcardTokens(remaining, anchorItem.tokens, false, false, threshold, 0, 0);
+if (res?.success) positions.push(i);
+}
+}
+
+return positions;
+}
+
+function findAnchorsBySignature(contentLines, signature, threshold, tolerance, origins, allowedOrigins, startFrom = 0, greedy = false, startCol = 0) {
+const k = signature.length;
+const candidates = [];
+const scanStart = Math.max(0, startFrom);
+if (k === 0 || contentLines.length < k) return candidates;
+for (let i = scanStart; i < contentLines.length; i++) {
+let currentLineIdx = i;
+let blockSim = 0;
+let ok = true;
+let captured = [];
+for (let j = 0; j < k; j++) {
+const sig = signature[j];
+let sim;
+if (sig.type === 'literal') {
+if (currentLineIdx >= contentLines.length) { ok = false; break; }
+if (origins && allowedOrigins && !allowedOrigins.includes(origins[currentLineIdx])) { ok = false; break; }
+const colToUse = (j === 0) ? startCol : 0;
+if (sig.text === '<EMPTY_LINE>') {
+sim = contentLines[currentLineIdx].trim() === '' ? 100 : 0;
+} else {
+sim = compareWithTolerance(contentLines[currentLineIdx], sig.text, threshold, 0, false, colToUse);
+}
+currentLineIdx++;
+} else if (sig.type === 'inline') {
+if (currentLineIdx >= contentLines.length) { ok = false; break; }
+if (origins && allowedOrigins && !allowedOrigins.includes(origins[currentLineIdx])) { ok = false; break; }
+let remaining = contentLines[currentLineIdx].slice(startCol);
+for (let l = currentLineIdx + 1; l < contentLines.length; l++) {
+remaining += '\n' + contentLines[l];
+}
+const lineResult = matchInlineWildcardTokens(remaining, sig.tokens, false, greedy, threshold, 0, 0);
+if (!lineResult || !lineResult.success) { ok = false; break; }
+sim = lineResult.sim;
+if (lineResult.captured) {
+captured.push(...lineResult.captured);
+}
+const linesConsumed = lineResult.matchText.split('\n').length;
+currentLineIdx += linesConsumed;
+} else {
+ok = false; break;
+}
+if (sim === 0) { ok = false; break; }
+blockSim += sim;
+}
+if (ok) {
+candidates.push({ index: i, end: currentLineIdx, score: blockSim, captured: captured });
+}
+}
+return candidates;
+}
+
+// -------------------- Helper: parse tool definition (FIXED depth = 1) (unchanged) --------------------
+function parseToolDefinition(toolText) {
+const idMatch = toolText.match(/tool\s*\(\s*\[\s*['"]([^'"]+)['"]/);
+if (!idMatch) return null;
+const identifier = idMatch[1];
+
+let body = '';
+let desc1 = '';
+let desc2 = '';
+
+let depth = 0;
+let inString = false;
+let stringChar = '';
+let escape = false;
+let commaCount = 0;
+let startBody = -1, endBody = -1;
+let startDesc1 = -1, endDesc1 = -1;
+let startDesc2 = -1, endDesc2 = -1;
+const str = toolText;
+for (let i = 0; i < str.length; i++) {
+const ch = str[i];
+if (inString) {
+if (escape) { escape = false; }
+else if (ch === '\\') { escape = true; }
+else if (ch === stringChar) { inString = false; }
+continue;
+}
+if (ch === '"' || ch === "'" || ch === '`') {
+inString = true;
+stringChar = ch;
+continue;
+}
+if (ch === '[' || ch === '(' || ch === '{') { depth++; }
+else if (ch === ']' || ch === ')' || ch === '}') { depth--; }
+// ★ FIX: commas separating tool() args are at depth === 1 (not 0)
+else if (ch === ',' && depth === 1) {
+commaCount++;
+if (commaCount === 2) {
+startBody = i + 1;
+} else if (commaCount === 3) {
+endBody = i;
+startDesc1 = i + 1;
+} else if (commaCount === 4) {
+endDesc1 = i;
+startDesc2 = i + 1;
+} else if (commaCount === 5) {
+endDesc2 = i;
+break;
+}
+}
+}
+if (startBody !== -1 && endBody !== -1) {
+body = str.substring(startBody, endBody).trim();
+}
+if (startDesc1 !== -1 && endDesc1 !== -1) {
+desc1 = str.substring(startDesc1, endDesc1).trim().replace(/^['"]|['"]$/g, '');
+}
+if (startDesc2 !== -1 && endDesc2 !== -1) {
+desc2 = str.substring(startDesc2, endDesc2).trim().replace(/^['"]|['"]$/g, '');
+}
+
+return { identifier, body, desc1, desc2 };
+}
+
+// -------------------- Organize Mode (FIXED: with block splitting using anchors) --------------------
+function isEffectivelyEmpty(lines) {
+if (!lines || lines.length === 0) return true;
+const joined = lines.join('\n').trim();
+if (joined === '') return true;
+const cleaned = joined.replace(/[\s…\.]/g, '');
+return cleaned === '';
+}
+
+function parseReplacementLineOrganize(line) {
+const tokens = [];
+let buffer = '';
+let i = 0;
+
+while (i < line.length) {
+const ch = line[i];
+if (ch === '\\' && i + 1 < line.length) {
+const next = line[i + 1];
+if (next === '.' && line.startsWith('..', i + 1)) {
+buffer += '...'; i += 4; continue;
+}
+if (next === '…') { buffer += '…'; i += 2; continue; }
+}
+if (line.startsWith(WILDCARD_ELLIPSIS_PLACEHOLDER, i)) {
+if (buffer) { tokens.push({ type: 'literal', text: buffer }); buffer = ''; }
+tokens.push({ type: 'wildcard', raw: '…' });
+i += WILDCARD_ELLIPSIS_PLACEHOLDER.length; continue;
+}
+if (line.startsWith(WILDCARD_THREE_DOTS_PLACEHOLDER, i)) {
+if (buffer) { tokens.push({ type: 'literal', text: buffer }); buffer = ''; }
+tokens.push({ type: 'wildcard', raw: '...' });
+i += WILDCARD_THREE_DOTS_PLACEHOLDER.length; continue;
+}
+if (line.startsWith('...', i)) {
+if (buffer) { tokens.push({ type: 'literal', text: buffer }); buffer = ''; }
+tokens.push({ type: 'wildcard', raw: '...' });
+i += 3; continue;
+}
+if (ch === '…') {
+if (buffer) { tokens.push({ type: 'literal', text: buffer }); buffer = ''; }
+tokens.push({ type: 'wildcard', raw: '…' });
+i += 1; continue;
+}
+buffer += ch;
+i++;
+}
+if (buffer) tokens.push({ type: 'literal', text: buffer });
+if (tokens.length === 0) tokens.push({ type: 'literal', text: line });
+
+return {
+tokens: tokens,
+isPureWildcard: tokens.length === 1 && tokens[0].type === 'wildcard',
+isPureLiteral: !tokens.some(t => t.type === 'wildcard'),
+identifier: null // not used; we use prefix matching
+};
+}
+
+async function OrganizeMode(work, searchLines, replLines, threshold, greedy, tolerance, applyMultipleMatches, signal, showStatus) {
+if (!Array.isArray(work)) work = [];
+if (!Array.isArray(searchLines)) searchLines = [];
+if (!Array.isArray(replLines)) replLines = [];
+
+let finalSearchLines = [...searchLines];
+let finalReplLines = [...replLines];
+
+if (finalReplLines.length === 0) {
+const sepIdx = finalSearchLines.findIndex(line => line.trim().toLowerCase() === 'replace');
+if (sepIdx !== -1) {
+finalReplLines = finalSearchLines.slice(sepIdx + 1);
+finalSearchLines = finalSearchLines.slice(0, sepIdx);
+}
+}
+
+if (finalReplLines.length === 0) {
+return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalNewLines: 0, appliedCount: 0 };
+}
+
+finalReplLines = finalReplLines.map(line => cleanupWildcardPlaceholders(line));
+
+const { items: searchItems } = buildPatternItems(finalSearchLines, lineWildcardEnabled);
+if (searchItems.length === 0) {
+return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalNewLines: 0, appliedCount: 0 };
+}
+
+let startMin = 0;
+let startMax = Math.max(0, work.length - 1);
+
+const bookend = getBookendAnchors(searchItems);
+if (bookend) {
+const ngramN = getNgramN(finalSearchLines);
+const ngramIndex = getNgramIndex(work, ngramN);
+const candidateStarts = findCandidateStarts(work, bookend, ngramIndex, ngramN);
+if (candidateStarts.length > 0) {
+startMin = searchItems[0]?.type === 'wildcard' ? 0 : Math.min(...candidateStarts);
+startMax = Math.max(...candidateStarts);
+}
+}
+if (searchItems[0]?.type === 'wildcard') startMin = 0;
+
+const allCandidates = [];
+for (let i = startMin; i <= startMax; i++) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const res = matchPatternLineBased(work, i, searchItems, threshold, greedy, 0);
+if (res.success && res.match) {
+allCandidates.push({
+start: i,
+end: res.match.end,
+avgSim: res.match.avgSim,
+minSim: res.match.minSim,
+captured: res.match.captured
+});
+}
+if ((i - startMin) % 50 === 0) await new Promise(r => setTimeout(r, 0));
+}
+
+if (allCandidates.length === 0) {
+return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalNewLines: 0, appliedCount: 0 };
+}
+
+allCandidates.sort((a, b) => {
+if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+return a.start - b.start;
+});
+
+const markers = [];
+let matchesToApply = [];
+if (applyMultipleMatches) {
+const selected = [];
+for (const cand of allCandidates) {
+const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end));
+if (!overlaps) selected.push(cand);
+}
+matchesToApply = selected;
+} else {
+const bestMatch = allCandidates[0];
+matchesToApply = [bestMatch];
+const margin = 5;
+for (const cand of allCandidates) {
+if (cand === bestMatch) continue;
+if (cand.avgSim >= bestMatch.avgSim - margin) {
+markers.push({ pos: cand.start, kind: 'ambiguity' });
+}
+}
+}
+
+if (matchesToApply.length === 0) {
+return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalNewLines: 0, appliedCount: 0 };
+}
+
+const parsedRepl = finalReplLines.map(parseReplacementLineOrganize);
+
+let currentWork = [...work];
+let totalAppliedCount = 0;
+let totalAvgSim = 0;
+
+function adjustMarkersAfterSplice(start, oldLen, newLen) {
+const diff = newLen - oldLen;
+for (const m of markers) {
+if (m.pos >= start) {
+m.pos += diff;
+}
+}
+}
+
+const normalizeExact = (s) => normalizeForComparison(s);
+
+for (const match of matchesToApply) {
+const blockStart = match.start;
+const blockEnd = match.end;
+const searchCaptures = match.captured || [];
+
+// ---- Stage 1: Collect captured blocks and split them using anchors ----
+const allCapturedBlocks = [];
+for (const capObj of searchCaptures) {
+if (Array.isArray(capObj.captures)) {
+allCapturedBlocks.push(capObj.captures);
+} else {
+allCapturedBlocks.push([String(capObj.captures ?? '')]);
+}
+}
+
+// Build anchors from replacement lines (literal prefix before first wildcard)
+const anchorSet = new Set();
+for (const p of parsedRepl) {
+if (p.isPureWildcard) continue;
+let prefix = '';
+for (const tok of p.tokens) {
+if (tok.type === 'literal') prefix += tok.text || '';
+else break;
+}
+const norm = normalizeExact(cleanupWildcardPlaceholders(restoreLiteralEllipsis(prefix)));
+if (norm.length > 0) anchorSet.add(norm);
+}
+const anchors = [...anchorSet].sort((a, b) => b.length - a.length);
+
+// Split each captured block into sub-blocks using anchors
+const allSubBlocks = [];
+for (const block of allCapturedBlocks) {
+if (block.length === 0) continue;
+if (anchors.length === 0 || block.length === 1) {
+allSubBlocks.push(block);
+continue;
+}
+let currentStart = 0;
+for (let i = 1; i < block.length; i++) {
+const lineNorm = normalizeExact(block[i]);
+if (anchors.some(a => lineNorm.startsWith(a))) {
+allSubBlocks.push(block.slice(currentStart, i));
+currentStart = i;
+}
+}
+allSubBlocks.push(block.slice(currentStart));
+}
+
+// ---- Stage 2: For each replacement line, extract wildcard values from its matched sub-block ----
+const organizedLines = [];
+const usedCaptureIndices = new Set();
+
+for (const p of parsedRepl) {
+// Pure wildcard line: use next unused sub-block as-is
+if (p.isPureWildcard) {
+let fallbackIdx = 0;
+while (fallbackIdx < allSubBlocks.length && usedCaptureIndices.has(fallbackIdx)) {
+fallbackIdx++;
+}
+let blockLines = [];
+if (fallbackIdx < allSubBlocks.length) {
+blockLines = allSubBlocks[fallbackIdx];
+usedCaptureIndices.add(fallbackIdx);
+}
+if (blockLines.length > 0 && !isEffectivelyEmpty(blockLines)) {
+for (const ln of blockLines) organizedLines.push(ln);
+} else {
+organizedLines.push(p.tokens[0]?.raw || '…');
+}
+continue;
+}
+
+// 1) Find the sub-block that matches this line's prefix (exact match on first line)
+let prefix = '';
+for (const tok of p.tokens) {
+if (tok.type === 'literal') prefix += tok.text || '';
+else break;
+}
+const prefixNorm = normalizeExact(cleanupWildcardPlaceholders(restoreLiteralEllipsis(prefix)));
+
+let matchedBlock = null;
+let matchedIndex = -1;
+if (prefixNorm.length > 0) {
+for (let i = 0; i < allSubBlocks.length; i++) {
+if (usedCaptureIndices.has(i)) continue;
+const block = allSubBlocks[i];
+if (block.length === 0) continue;
+const firstLineNorm = normalizeExact(block[0]);
+if (firstLineNorm === prefixNorm) {
+matchedBlock = block;
+matchedIndex = i;
+break;
+}
+}
+}
+
+// If no match, output the line as-is (with raw wildcards)
+if (!matchedBlock || matchedIndex === -1) {
+let rawLine = '';
+for (const tok of p.tokens) {
+if (tok.type === 'literal') {
+rawLine += cleanupWildcardPlaceholders(restoreLiteralEllipsis(tok.text || ''));
+} else {
+rawLine += tok.raw || '…';
+}
+}
+organizedLines.push(cleanupWildcardPlaceholders(restoreLiteralEllipsis(rawLine)));
+continue;
+}
+
+// Mark block as used
+usedCaptureIndices.add(matchedIndex);
+const subBlock = matchedBlock;
+const blockStr = subBlock.join('\n');
+
+// Extract literal parts (for anchoring)
+const literalTokens = p.tokens.filter(t => t.type === 'literal');
+const literals = literalTokens.map(t => cleanupWildcardPlaceholders(restoreLiteralEllipsis(t.text || '')));
+
+let pos = 0;
+const wildcardValues = [];
+let literalIdx = 0;
+
+// Process tokens sequentially
+for (let i = 0; i < p.tokens.length; i++) {
+const tok = p.tokens[i];
+
+if (tok.type === 'wildcard') {
+wildcardValues.push(null);
+continue;
+}
+
+// tok.type === 'literal'
+const lit = literals[literalIdx] || '';
+literalIdx++;
+
+if (lit === '') continue; // skip empty literal (shouldn't happen)
+
+// Find literal in original block string
+const result = findLiteralExactFlexible(blockStr, pos, lit, false);
+if (!result.found) {
+// Could not find literal – stop extraction, leave remaining wildcards as null
+break;
+}
+
+const foundPos = result.pos;
+const matchedLength = result.matchedLength;
+
+// Fill the last wildcard (the one immediately before this literal) with substring from pos to foundPos
+for (let w = wildcardValues.length - 1; w >= 0; w--) {
+if (wildcardValues[w] === null) {
+wildcardValues[w] = blockStr.substring(pos, foundPos);
+break;
+}
+}
+
+pos = foundPos + matchedLength;
+}
+
+// Fill any remaining null wildcards (trailing wildcards) with rest of string
+for (let w = 0; w < wildcardValues.length; w++) {
+if (wildcardValues[w] === null) {
+wildcardValues[w] = blockStr.substring(pos);
+pos = blockStr.length; // subsequent nulls become empty string
+}
+}
+
+// Rebuild output line
+let output = '';
+let wildcardIdx = 0;
+for (const tok of p.tokens) {
+if (tok.type === 'literal') {
+output += cleanupWildcardPlaceholders(restoreLiteralEllipsis(tok.text || ''));
+} else {
+const value = (wildcardIdx < wildcardValues.length && wildcardValues[wildcardIdx] !== null)
+? wildcardValues[wildcardIdx]
+: (tok.raw || '…');
+output += value;
+wildcardIdx++;
+}
+}
+organizedLines.push(cleanupWildcardPlaceholders(restoreLiteralEllipsis(output)));
+}
+
+// ---- Apply replacement ----
+const flattened = [];
+for (const item of organizedLines) {
+const parts = String(item ?? '').split('\n');
+flattened.push(...parts);
+}
+
+const oldLen = currentWork.length;
+currentWork.splice(blockStart, blockEnd - blockStart, ...flattened);
+const newLen = currentWork.length;
+adjustMarkersAfterSplice(blockStart, blockEnd - blockStart, flattened.length);
+
+totalAppliedCount++;
+totalAvgSim += match.avgSim;
+}
+
+// Insert ambiguity markers (only if not applyMultipleMatches)
+if (markers.length && !applyMultipleMatches) {
+const sortedMarkers = markers.sort((a, b) => b.pos - a.pos);
+for (const m of sortedMarkers) {
+if (m.kind === 'ambiguity') {
+currentWork.splice(m.pos, 0, MARKER_LINE);
+}
+}
+}
+
+const applied = totalAppliedCount > 0;
+const avgSim = applied ? Math.max(0, Math.min(100, Math.round(totalAvgSim / totalAppliedCount))) : 0;
+
+markIndexDirty();
+
+return {
+applied,
+newWork: currentWork,
+avgSim,
+totalOriginalLines: applied ? work.length : 0,
+totalNewLines: applied ? currentWork.length : 0,
+appliedCount: totalAppliedCount
+};
+}
+// -------------------- ReplaceMode1 (with marker adjustment and wildcard counting) (unchanged) --------------------
+async function ReplaceMode1(content, rules, threshold, greedy, applyMultipleMatches, tolerance, originalContent, originalRawRules, signal, showStatus, updateStats) {
+ellipsisWildcardEnabled = ellipsisWildcard.checked;
+
+const sep = separatorInput ? separatorInput.value.trim() : '';
+const patterns = parseMode1Pattern(rules, sep);
+if (!patterns || patterns.length === 0) {
+if (showStatus) showStatus('No valid patterns found. Check fences and separator.', 'warning');
+if (updateStats) updateStats();
+return { newContent: content, totalApplied: 0, reports: [], totalRules: 0, usedCount: 0, patterns: null, usedPatterns: new Set(), patternsMatched: 0 };
+}
+
+const usedPatterns = new Set();
+let work = norm(content).split('\n');
+const markers = [];
+let totalApplied = 0;
+const reports = [];
+const shouldShowMarkers = showMarkers && !applyMultipleMatches;
+let globalOffset = 0;
+
+function applyReplacementAndAdjustMarkers(start, end, replacementLines) {
+const oldLen = work.length;
+work.splice(start, end - start, ...replacementLines);
+const newLen = work.length;
+const diff = newLen - oldLen;
+globalOffset += diff;
+for (const m of markers) {
+if (m.pos >= start) {
+m.pos += diff;
+}
+}
+}
+
+for (let pi = 0; pi < patterns.length; pi++) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const pat = patterns[pi];
+const searchLines = pat.searchLines;
+const replLines = pat.replLines;
+
+if (!searchLines || searchLines.length === 0) {
+reports.push({ index: pi, bestSimilarity: 0, success: false, failureReason: 'Search block is empty' });
+continue;
+}
+const organizeToggleChecked = organizeModeToggle ? organizeModeToggle.checked : false;
+const forceOrganizeMode = shouldForceOrganizeMode(searchLines, replLines, organizeToggleChecked);
+const isOrganizeMode = organizeToggleChecked || forceOrganizeMode;
+
+const wildcardCount = countWildcardPlaceholders(replLines);
+if (modeStatusBadge) {
+if (forceOrganizeMode && !organizeToggleChecked) {
+modeStatusBadge.textContent = `🗂️ Auto Organize (${wildcardCount} wildcards)`;
+} else if (isOrganizeMode) {
+modeStatusBadge.textContent = `🗂️ Organize (${wildcardCount} wildcards)`;
+} else {
+modeStatusBadge.textContent = `📏 Normal (${wildcardCount} wildcards)`;
+}
+}
+
+if (isOrganizeMode) {
+const result = await OrganizeMode(work, searchLines, replLines, threshold, greedy, 0, applyMultipleMatches, signal, showStatus);
+if (result.applied) {
+const oldLen = work.length;
+work = result.newWork;
+const newLen = work.length;
+globalOffset += (newLen - oldLen);
+totalApplied += result.appliedCount;
+usedPatterns.add(pi);
+reports.push({
+index: pi,
+bestSimilarity: Math.round(result.avgSim),
+success: true,
+originalLineCount: result.totalOriginalLines,
+replacementLineCount: result.totalNewLines,
+failureReason: null
+});
+markIndexDirty();
+} else {
+reports.push({
+index: pi,
+bestSimilarity: 0,
+success: false,
+failureReason: result.failureReason || 'No matching block found'
+});
+}
+} else {
+const { items } = buildPatternItems(searchLines, lineWildcardEnabled);
+const bookend = getBookendAnchors(items);
+
+const minPatternLines = items.reduce((acc, it) => {
+if (it.type === 'literal_block') return acc + it.text.split('\n').length;
+if (it.type === 'inline_pattern') return acc + 1;
+return acc;
+}, 0);
+
+let startMin = 0;
+let startMax = Math.max(0, work.length - (minPatternLines === 0 ? 1 : minPatternLines));
+const ngramN = getNgramN(searchLines);
+if (bookend) {
+const ngramIndex = getNgramIndex(work, ngramN);
+const candidateStarts = findCandidateStarts(work, bookend, ngramIndex, ngramN);
+const validStarts = candidateStarts.filter(i => i >= 0 && i <= startMax);
+if (validStarts.length > 0) {
+startMin = items[0]?.type === 'wildcard' ? 0 : Math.min(...validStarts);
+startMax = Math.max(...validStarts);
+} else {
+const firstMatches = [];
+const lastMatches = [];
+for (let i = 0; i < work.length; i++) {
+if (i > startMax) break;
+if (compareWithTolerance(work[i], bookend.firstLine, threshold, 0) > 0) firstMatches.push(i);
+if (compareWithTolerance(work[i], bookend.lastLine, threshold, 0) > 0) lastMatches.push(i);
+}
+const validFirst = firstMatches.filter(i => i >= 0 && i <= startMax);
+const validLast = lastMatches.filter(i => i >= 0 && i <= startMax);
+if (validFirst.length > 0) startMin = items[0]?.type === 'wildcard' ? 0 : Math.min(...validFirst);
+if (validLast.length > 0) startMax = Math.max(...validLast);
+}
+}
+if (items[0]?.type === 'wildcard') startMin = 0;
+
+const allCandidates = [];
+let bestFailureReason = 'No full match';
+for (let i = startMin; i <= startMax; i++) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const res = matchPatternLineBased(work, i, items, threshold, greedy, 0);
+if (res.success) {
+allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
+} else {
+bestFailureReason = 'Match failed';
+}
+if ((i - startMin) % 100 === 0) {
+if (showStatus) showStatus(`⏳ Searching... (${i - startMin + 1} positions checked)`, 'info');
+await new Promise(r => setTimeout(r, 0));
+}
+}
+
+if (allCandidates.length === 0) {
+reports.push({ index: pi, bestSimilarity: 0, success: false, failureReason: bestFailureReason });
+continue;
+}
+
+allCandidates.sort((a, b) => {
+if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+return a.start - b.start;
+});
+const maxScore = allCandidates[0].avgSim;
+const margin = 5;
+const bestMatches = allCandidates.filter(m => Math.abs(m.avgSim - maxScore) < 1e-9);
+
+let matchesToProcess = [];
+if (applyMultipleMatches) {
+const selected = [];
+for (const cand of allCandidates) {
+const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end));
+if (!overlaps) selected.push(cand);
+}
+matchesToProcess = selected;
+if (matchesToProcess.length > 1000) {
+matchesToProcess = matchesToProcess.slice(0, 1000);
+}
+matchesToProcess.sort((a, b) => b.start - a.start);
+} else {
+matchesToProcess = [bestMatches[0]];
+if (shouldShowMarkers) {
+for (const cand of allCandidates) {
+if (cand === bestMatches[0]) continue;
+if (cand.avgSim >= maxScore - margin) {
+markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end });
+}
+}
+}
+}
+
+if (matchesToProcess.length === 0 && allCandidates.length > 0) {
+reports.push({
+index: pi,
+bestSimilarity: Math.round(bestMatches[0]?.avgSim ?? 0),
+success: false,
+failureReason: 'All matches overlap with previous applications'
+});
+continue;
+}
+
+for (const match of matchesToProcess) {
+const flatCaptures = (match.captured || []).map(capObj => {
+if (Array.isArray(capObj.captures)) return capObj.captures.join('\n');
+return '';
+});
+const originalMatchedLines = work.slice(match.start, match.end);
+const replacement = buildMode1Replacement(replLines, flatCaptures, originalMatchedLines);
+
+const originalBlock = originalMatchedLines.join('\n');
+const newBlock = replacement.join('\n');
+if (collapseWS(originalBlock) === collapseWS(newBlock)) {
+reports.push({
+index: pi,
+bestSimilarity: Math.round(match.avgSim),
+success: false,
+failureReason: 'Replacement produces identical content (no-op)',
+originalLineCount: match.end - match.start,
+replacementLineCount: replacement.length
+});
+continue;
+}
+
+applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+totalApplied++;
+usedPatterns.add(pi);
+reports.push({
+index: pi,
+bestSimilarity: Math.round(match.avgSim),
+success: true,
+originalLineCount: match.end - match.start,
+replacementLineCount: replacement.length,
+failureReason: null
+});
+markIndexDirty();
+}
+}
+await new Promise(r => setTimeout(r, 0));
+}
+
+if (shouldShowMarkers && markers.length) {
+const uniqueMarkers = [];
+const seen = new Set();
+for (const m of markers.sort((a,b) => b.pos - a.pos)) {
+if (!seen.has(m.pos)) {
+seen.add(m.pos);
+uniqueMarkers.push(m);
+}
+}
+for (const m of uniqueMarkers) {
+if (m.kind === 'ambiguity') {
+work.splice(m.pos, 0, MARKER_LINE);
+}
+}
+}
+
+const newContent = cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n')));
+return {
+newContent,
+totalApplied,
+reports,
+totalRules: patterns.length,
+usedCount: usedPatterns.size,
+patterns,
+usedPatterns,
+patternsMatched: usedPatterns.size
+};
+}
+
+// -------------------- ReplaceMode2 (with marker adjustment) (unchanged) --------------------
+async function ReplaceMode2(contentRaw, rules, threshold, greedy, applyMultipleMatches, tolerance, signal, showStatus, updateStats, originalRawRules) {
+ellipsisWildcardEnabled = ellipsisWildcard.checked;
+const blocks = parseMode2Blocks(norm(rules).split('\n'));
+if (blocks.length === 0) {
+if (showStatus) showStatus('No valid blocks found. Use blank line to separate search and replacement.', 'warning');
+return { newContent: contentRaw, totalApplied: 0, reports: [], patternsMatched: 0, totalRules: 0, usedCount: 0, usedBlocks: new Set() };
+}
+
+let work = norm(contentRaw).split('\n');
+let origins = work.map(() => 'original');
+const markers = [];
+let totalApplied = 0;
+let patternsMatched = 0;
+const usedBlocks = new Set();
+const reports = [];
+const shouldShowMarkers = showMarkers && !applyMultipleMatches;
+let globalOffset = 0;
+
+function applyReplacementAndAdjustMarkers(start, end, replacementLines) {
+const oldLen = work.length;
+work.splice(start, end - start, ...replacementLines);
+const newLen = work.length;
+const diff = newLen - oldLen;
+globalOffset += diff;
+for (const m of markers) {
+if (m.pos >= start) {
+m.pos += diff;
+}
+}
+}
+
+for (let bi = 0; bi < blocks.length; bi++) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const block = blocks[bi];
+const searchLines = block.searchLines;
+const replLines = block.replLines;
+
+if (searchLines.length === 0 || replLines.length === 0) {
+reports.push({ index: bi, success: false, failureReason: 'Search or replacement lines missing' });
+continue;
+}
+
+const wildcardCount = countWildcardPlaceholders(replLines);
+if (modeStatusBadge) {
+modeStatusBadge.textContent = `📏 Mode 2 (${wildcardCount} wildcards)`;
+}
+
+const allPureWildcard = searchLines.every(line => {
+const trimmed = line.trim();
+return trimmed === '...' || trimmed === '…' || trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER || trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER;
+});
+
+if (allPureWildcard) {
+const literalAnchors = [];
+for (const rLine of replLines) {
+const trimmed = rLine.trim();
+if (trimmed === '...' || trimmed === '…' || trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER || trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER) {
+continue;
+}
+const cleaned = cleanupWildcardPlaceholders(restoreLiteralEllipsis(rLine));
+if (cleaned.trim().length > 0) {
+literalAnchors.push(cleaned);
+}
+}
+
+if (literalAnchors.length > 0) {
+const primaryAnchor = literalAnchors[0];
+const ngramN = getNgramN([primaryAnchor]);
+const ngramIndex = getNgramIndex(work, ngramN);
+const candidates = findCandidateStarts(work, { firstLine: primaryAnchor, lastLine: primaryAnchor }, ngramIndex, ngramN);
+
+let bestLine = -1;
+let bestScore = 0;
+const candidateScores = [];
+for (const lineIdx of candidates) {
+if (lineIdx >= work.length) continue;
+const score = compareWithTolerance(work[lineIdx], primaryAnchor, threshold, 0);
+candidateScores.push({ lineIdx, score });
+if (score > bestScore) { bestScore = score; bestLine = lineIdx; }
+}
+
+if (bestLine !== -1 && bestScore >= threshold) {
+if (!applyMultipleMatches) {
+const margin = 5;
+for (const cs of candidateScores) {
+if (cs.lineIdx === bestLine) continue;
+if (Math.abs(cs.score - bestScore) <= margin) {
+markers.push({ pos: cs.lineIdx + globalOffset, kind: 'ambiguity' });
+}
+}
+const replacement = buildMode2Replacement(replLines, []);
+const insertPos = bestLine + 1;
+applyReplacementAndAdjustMarkers(insertPos, insertPos, replacement);
+totalApplied++;
+usedBlocks.add(bi);
+reports.push({ index: bi, success: true, originalLineCount: 0, replacementLineCount: replacement.length, bestSimilarity: Math.round(bestScore) });
+markIndexDirty();
+continue;
+} else {
+// applyMultipleMatches: for simplicity, only best is applied.
+}
+}
+}
+
+if (applyMultipleMatches) {
+const replacement = buildMode2Replacement(replLines, []);
+const insertPos = work.length;
+applyReplacementAndAdjustMarkers(insertPos, insertPos, replacement);
+totalApplied++;
+usedBlocks.add(bi);
+reports.push({ index: bi, success: true, originalLineCount: 0, replacementLineCount: replacement.length, bestSimilarity: 100 });
+} else {
+reports.push({ index: bi, success: false, failureReason: 'No literal anchors and allowAmbiguity off' });
+}
+continue;
+}
+
+// ---- Non-pure: try all splits ----
+const nonEmpty = searchLines.filter(l => l.trim().length > 0);
+if (nonEmpty.length < 2) {
+reports.push({ index: bi, success: false, failureReason: 'Too few non-empty search lines' });
+continue;
+}
+
+let bestScore = -1;
+let bestSearchLines = null;
+let bestReplLines = null;
+let bestCandidates = [];
+let bestSplit = -1;
+
+for (let split = 1; split < nonEmpty.length; split++) {
+const sLines = nonEmpty.slice(0, split);
+const rLines = nonEmpty.slice(split);
+if (rLines.length === 0) continue;
+
+const signature = extractSignatureMode2(sLines, split);
+const candidates = findAnchorsBySignature(work, signature, threshold, 0, origins, ['original'], 0, greedy, 0);
+if (candidates.length === 0) continue;
+
+const totalScore = candidates.reduce((sum, c) => sum + c.score / split, 0);
+const avgScore = totalScore / candidates.length;
+if (avgScore > bestScore) {
+bestScore = avgScore;
+bestSearchLines = sLines;
+bestReplLines = rLines;
+bestCandidates = candidates;
+bestSplit = split;
+}
+}
+
+if (bestScore < threshold) {
+reports.push({ index: bi, success: false, failureReason: `No suitable signature split found (best score ${Math.round(bestScore)} < ${threshold})` });
+continue;
+}
+
+const bestMatch = bestCandidates.reduce((a, b) => (a.score > b.score ? a : b));
+
+if (!applyMultipleMatches) {
+const margin = 5;
+for (const cand of bestCandidates) {
+if (cand === bestMatch) continue;
+if (Math.abs(cand.score - bestMatch.score) <= margin) {
+markers.push({ pos: cand.index + globalOffset, kind: 'ambiguity' });
+}
+}
+const flatCaptures = (bestMatch.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
+const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
+const originalBlock = work.slice(bestMatch.index, bestMatch.end).join('\n');
+const newBlock = replacement.join('\n');
+if (collapseWS(originalBlock) !== collapseWS(newBlock)) {
+applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
+totalApplied++;
+usedBlocks.add(bi);
+reports.push({
+index: bi,
+bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
+success: true,
+originalLineCount: bestMatch.end - bestMatch.index,
+replacementLineCount: replacement.length,
+failureReason: null
+});
+markIndexDirty();
+} else {
+reports.push({ index: bi, success: false, failureReason: 'Replacement identical (no-op)' });
+}
+} else {
+const matchesToApply = bestCandidates.map(c => ({
+start: c.index,
+end: c.end,
+avgSim: c.score / bestSearchLines.length,
+captured: c.captured || []
+}));
+matchesToApply.sort((a, b) => {
+if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+return a.start - b.start;
+});
+const selected = [];
+for (const m of matchesToApply) {
+if (selected.some(s => !(m.end <= s.start || m.start >= s.end))) continue;
+selected.push(m);
+}
+for (const match of selected) {
+const flatCaptures = (match.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
+const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
+const originalBlock = work.slice(match.start, match.end).join('\n');
+const newBlock = replacement.join('\n');
+if (collapseWS(originalBlock) !== collapseWS(newBlock)) {
+applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+totalApplied++;
+usedBlocks.add(bi);
+reports.push({
+index: bi,
+bestSimilarity: Math.round(match.avgSim),
+success: true,
+originalLineCount: match.end - match.start,
+replacementLineCount: replacement.length,
+failureReason: null
+});
+markIndexDirty();
+} else {
+reports.push({ index: bi, success: false, failureReason: 'Replacement identical (no-op)' });
+}
+}
+}
+await new Promise(r => setTimeout(r, 0));
+}
+
+if (shouldShowMarkers && markers.length) {
+const uniqueMarkers = [];
+const seen = new Set();
+for (const m of markers.sort((a,b) => b.pos - a.pos)) {
+if (!seen.has(m.pos)) {
+seen.add(m.pos);
+uniqueMarkers.push(m);
+}
+}
+for (const m of uniqueMarkers) {
+if (m.kind === 'ambiguity') {
+work.splice(m.pos, 0, MARKER_LINE);
+}
+}
+}
+
+const newContent = cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n')));
+return {
+newContent,
+totalApplied,
+reports,
+patternsMatched: usedBlocks.size,
+totalRules: blocks.length,
+usedCount: usedBlocks.size,
+usedBlocks
+};
+}
+
+// -------------------- Mode2 block parser (unchanged) --------------------
+function parseMode2Blocks(lines) {
+const blocks = [];
+let i = 0;
+while (i < lines.length) {
+while (i < lines.length && lines[i].trim() === '') i++;
+if (i >= lines.length) break;
+
+const blockLines = [];
+let blankCount = 0;
+while (i < lines.length) {
+const trimmed = lines[i].trim();
+if (trimmed === '') {
+blankCount++;
+if (blankCount >= 2) {
+break;
+}
+blockLines.push('');
+i++;
+} else {
+blankCount = 0;
+blockLines.push(lines[i]);
+i++;
+}
+}
+if (blockLines.length === 0) continue;
+
+const sepIdx = blockLines.findIndex(line => line.trim() === '');
+if (sepIdx === -1) {
+continue;
+}
+const searchLines = blockLines.slice(0, sepIdx).filter(l => l.trim() !== '');
+const replLines = blockLines.slice(sepIdx + 1).filter(l => l.trim() !== '');
+if (searchLines.length === 0 || replLines.length === 0) continue;
+
+blocks.push({ searchLines, replLines });
+}
+return blocks;
+}
+
+// -------------------- Helper functions --------------------
+function parseMode1Pattern(rules, sep) {
+const lines = norm(rules).split('\n');
+const patterns = [];
+let i = 0;
+
+while (i < lines.length) {
+const trimmed = lines[i].trim();
+if (trimmed.startsWith('```')) {
+const fenceStart = i;
+const searchLines = [];
+i++;
+while (i < lines.length && !lines[i].trim().startsWith('```')) {
+searchLines.push(lines[i]);
+i++;
+}
+if (i >= lines.length) break;
+const fenceEnd = i;
+i++; // move past closing fence
+
+// ---------- CHANGED HERE ----------
+const sepIdx = lines.findIndex((line, idx) => 
+idx >= i && line.toLowerCase().includes(sep.toLowerCase())
+);
+// ----------------------------------
+
+if (sepIdx === -1) break;
+
+// collect replacement lines
+const replLines = [];
+let replStart = sepIdx + 1;
+while (replStart < lines.length && lines[replStart].trim().startsWith('```')) {
+replStart++;
+}
+let replEnd = replStart;
+while (replEnd < lines.length && !lines[replEnd].trim().startsWith('```')) {
+replLines.push(lines[replEnd]);
+replEnd++;
+}
+const closingFenceIdx = replEnd;
+
+patterns.push({
+searchLines: searchLines.map(l => l.trim()),
+replLines: replLines.slice(),
+lineIndices: {
+searchStart: fenceStart,
+sepIdx: sepIdx,
+replEnd: closingFenceIdx
+}
+});
+
+i = closingFenceIdx + 1;
+} else {
+i++;
+}
+}
+
+// fallback (no fences) – also use includes
+if (patterns.length === 0) {
+const sepIdx = lines.findIndex(line => line.toLowerCase().includes(sep.toLowerCase()));
+if (sepIdx !== -1) {
+const searchLines = lines.slice(0, sepIdx).map(l => l.trim()).filter(l => l.length > 0);
+const replLines = lines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
+if (searchLines.length > 0 && replLines.length > 0) {
+patterns.push({
+searchLines,
+replLines,
+lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
+});
+}
+}
+}
+
+return patterns;
+}
+
+function parseFenceInfos(lines) {
+const pairs = [];
+let level = 0;
+for (let i = 0; i < lines.length; i++) {
+const trimmed = lines[i].trim();
+if (trimmed.startsWith('```')) {
+pairs.push({ index: i, level: level });
+level++;
+}
+}
+const allPairs = [];
+for (let i = 0; i < pairs.length; i += 2) {
+if (i + 1 < pairs.length) {
+allPairs.push({ start: pairs[i].index, end: pairs[i + 1].index, level: pairs[i].level });
+}
+}
+return { allPairs };
+}
+
+function buildMode1Replacement(replLines, captures, originalMatchedLines) {
+const restoredRepl = replLines.map(line => restoreLiteralEllipsis(line));
+
+const hasActiveWildcards = replLines.some(line =>
+line.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) ||
+line.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)
+);
+
+if (!hasActiveWildcards) {
+return restoredRepl.map(line => cleanupWildcardPlaceholders(line));
+}
+
+const flatCaptures = captures.map(c => Array.isArray(c) ? c.join('\n') : String(c));
+let seqIdx = 0;
+const outputLines = [];
+
+for (const line of restoredRepl) {
+const tokens = tokenizeEllipses(line, true, true);
+let newLine = '';
+for (const tok of tokens) {
+if (tok.type === 'wildcard' || (tok.type === 'wildcard_candidate' && tok.raw)) {
+if (seqIdx < flatCaptures.length) {
+newLine += flatCaptures[seqIdx];
+seqIdx++;
+} else {
+newLine += tok.raw || '…';
+}
+} else {
+newLine += tok.text || '';
+}
+}
+outputLines.push(cleanupWildcardPlaceholders(restoreLiteralEllipsis(newLine)));
+}
+
+return outputLines;
+}
+
+function buildMode2Replacement(replLines, captures) {
+const flatCaptures = captures.map(c => Array.isArray(c) ? c.join('\n') : String(c));
+return buildMode1Replacement(replLines, flatCaptures, []);
+}
+
+// ★ FIXED: auto-organize only when replacement has >19 wildcards
+function shouldForceOrganizeMode(searchLines, replLines, organizeModeChecked) {
+if (organizeModeChecked) return true; // Manual toggle always wins
+
+const searchStr = searchLines.join('\n');
+const hasWildcard = searchStr.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) ||
+searchStr.includes(WILDCARD_THREE_DOTS_PLACEHOLDER);
+if (!hasWildcard) return false;
+
+// Count wildcards in the replacement block
+const wildcardCount = countWildcardPlaceholders(replLines);
+
+// Auto‑organize only if replacement block has more than 19 wildcards
+return wildcardCount > 19;
+}
+
+function extractSignatureMode2(searchLines, k) {
+const signature = [];
+const isWildcardEnabled = ellipsisWildcardEnabled;
+for (const raw of searchLines) {
+if (signature.length >= k) break;
+const line = String(raw ?? '').trim();
+if (!line) continue;
+let tokens = tokenizeEllipses(line, isWildcardEnabled);
+tokens = resolveSearchWildcards(tokens, true, lineWildcardEnabled);
+const hasWildcard = tokens.some(t => t.type === 'wildcard');
+if (hasWildcard) {
+signature.push({ type: 'inline', tokens });
+} else {
+const text = tokens.map(t => t.text).join('');
+signature.push({ type: 'literal', text: text.trim() });
+}
+}
+return signature;
+}
+
+// -------------------- Count wildcard placeholders in replacement lines --------------------
+function countWildcardPlaceholders(lines) {
+let count = 0;
+for (const line of lines) {
+let idx = 0;
+while ((idx = line.indexOf(WILDCARD_ELLIPSIS_PLACEHOLDER, idx)) !== -1) {
+count++;
+idx += WILDCARD_ELLIPSIS_PLACEHOLDER.length;
+}
+idx = 0;
+while ((idx = line.indexOf(WILDCARD_THREE_DOTS_PLACEHOLDER, idx)) !== -1) {
+count++;
+idx += WILDCARD_THREE_DOTS_PLACEHOLDER.length;
+}
+}
+return count;
+}
+
+// -------------------- Stats and UI helpers (unchanged) --------------------
+let statsVersion = 0, statsTimer = null;
+let cachedMode1Stats = { cacheKey: '', raw: '', sep: '', result: null };
+let cachedMode2Stats = { cacheKey: '', result: null };
+
+function updateStats() {
+clearTimeout(statsTimer);
+const version = ++statsVersion;
+statsTimer = setTimeout(() => {
+if (version !== statsVersion) return;
+if (!contentArea || !patternArea) return;
+
+const content = contentArea.value,
+rules = patternArea.value;
+
+if (contentCharCount) contentCharCount.textContent = content.length + ' chars';
+if (contentLineBadge) contentLineBadge.textContent = content.split('\n').length + ' lines';
+if (patternCharCount) patternCharCount.textContent = rules.length + ' chars';
+if (patternLineBadge) patternLineBadge.textContent = rules.split('\n').length + ' lines';
+if (appliedCountSpan) appliedCountSpan.textContent = lastAppliedCount;
+if (similarityVal && similarityRange) similarityVal.textContent = similarityRange.value + '%';
+
+let totalRules = 0;
+if (currentMode === 1) {
+const sep = separatorInput ? separatorInput.value.trim() : '';
+const cacheKey = `${currentMode}:${rules}:${sep}`;
+if (cachedMode1Stats.cacheKey !== cacheKey) {
+cachedMode1Stats = {
+cacheKey,
+raw: rules,
+sep,
+result: analyseMode1(rules, sep)
+};
+}
+const { valid, potential } = cachedMode1Stats.result;
+if (patternValid) patternValid.textContent = valid;
+if (patternPotential) patternPotential.textContent = potential;
+
+if (mode1Stats) mode1Stats.classList.remove('hidden');
+if (mode2BlockCount) mode2BlockCount.classList.add('hidden');
+totalRules = valid;
+} else {
+if (mode1Stats) mode1Stats.classList.add('hidden');
+
+const cacheKey = `${currentMode}:${rules}`;
+if (cachedMode2Stats.cacheKey !== cacheKey) {
+const blocks = parseMode2Blocks(norm(rules).split('\n'));
+cachedMode2Stats = { cacheKey, result: blocks.length };
+}
+const blockCount = cachedMode2Stats.result;
+if (blockCountVal) blockCountVal.textContent = blockCount;
+if (mode2BlockCount) mode2BlockCount.classList.remove('hidden');
+totalRules = blockCount;
+}
+
+if (totalRulesSpan) totalRulesSpan.textContent = totalRules;
+if (usedRulesSpan) usedRulesSpan.textContent = lastUsedCount;
+if (leftoverRulesSpan) leftoverRulesSpan.textContent = Math.max(0, totalRules - lastUsedCount);
+}, 400);
+}
+
+function analyseMode1(raw, sep) {
+const patterns = parseMode1Pattern(raw, sep) || [];
+const lines = norm(raw).split('\n');
+const { allPairs } = parseFenceInfos(lines);
+const outerCount = allPairs.filter(p => p.level === 0).length;
+const potential = Math.max(0, Math.floor(outerCount / 2) - patterns.length);
+return { valid: patterns.length, potential };
+}
+
+function clearCaches() {
+cachedMode1Stats = { cacheKey: '', raw: '', sep: '', result: null };
+cachedMode2Stats = { cacheKey: '', result: null };
+}
+
+function setModeHint(msg) {
+if (modeHintText) modeHintText.textContent = msg;
+}
+
+function updateWildcardDependencies() {
+if (!ellipsisWildcard) return;
+const isEnabled = ellipsisWildcard.checked;
+if (greedyEllipsis) greedyEllipsis.disabled = !isEnabled;
+if (lineWildcard) lineWildcard.disabled = !isEnabled;
+if (greedyEllipsisWrap) {
+greedyEllipsisWrap.style.opacity = isEnabled ? '1' : '0.4';
+greedyEllipsisWrap.style.pointerEvents = isEnabled ? 'auto' : 'none';
+}
+if (lineWildcardWrap) {
+lineWildcardWrap.style.opacity = isEnabled ? '1' : '0.4';
+lineWildcardWrap.style.pointerEvents = isEnabled ? 'auto' : 'none';
+}
+ellipsisWildcardEnabled = isEnabled;
+}
+
+function resetOpStats() {
+lastAppliedCount = 0;
+lastTotalRules = 0;
+lastUsedCount = 0;
+if (matchDetails) matchDetails.classList.add('hidden');
+}
+
+function bindLiveUpdate() {
+if (contentArea) contentArea.addEventListener('input', () => { resetOpStats(); updateStats(); });
+if (patternArea) patternArea.addEventListener('input', () => { resetOpStats(); updateStats(); });
+if (similarityRange) similarityRange.addEventListener('input', updateStats);
+if (mode2Sim) mode2Sim.addEventListener('input', updateStats);
+if (separatorInput) separatorInput.addEventListener('input', updateStats);
+if (mode1Threshold) mode1Threshold.addEventListener('input', updateStats);
+if (mode2Threshold) mode2Threshold.addEventListener('input', updateStats);
+if (mode2Tolerance) mode2Tolerance.addEventListener('input', updateStats);
+if (lockedPattern) lockedPattern.addEventListener('change', updateStats);
+if (greedyEllipsis) greedyEllipsis.addEventListener('change', updateStats);
+if (ellipsisWildcard) {
+ellipsisWildcard.addEventListener('change', () => {
+const checked = ellipsisWildcard.checked;
+ellipsisWildcardEnabled = checked;
+updateWildcardDependencies();
+updateStats();
+});
+}
+if (lineWildcard) {
+lineWildcard.addEventListener('change', () => {
+const checked = lineWildcard.checked;
+lineWildcardEnabled = checked;
+updateStats();
+});
+}
+if (allowAmbiguityToggle) {
+allowAmbiguityToggle.addEventListener('change', updateStats);
+}
+if (interpretEscapesToggle) interpretEscapesToggle.addEventListener('change', updateStats);
+if (organizeModeToggle) organizeModeToggle.addEventListener('change', updateStats);
+if (showMarkersToggle) {
+showMarkersToggle.addEventListener('change', () => {
+const checked = showMarkersToggle.checked;
+showMarkers = checked;
+updateStats();
+});
+}
+}
+
+function setupKeyboardNav(tabs) {
+tabs.forEach((tab, index) => {
+tab.addEventListener('keydown', (e) => {
+let targetIndex = index;
+if (e.key === 'ArrowRight') {
+targetIndex = (index + 1) % tabs.length;
+e.preventDefault();
+} else if (e.key === 'ArrowLeft') {
+targetIndex = (index - 1 + tabs.length) % tabs.length;
+e.preventDefault();
+} else {
+return;
+}
+tabs[targetIndex].click();
+tabs[targetIndex].focus();
+});
+});
+}
+
+function renderReport(reports, thresholdVal) {
+if (!matchReport) return;
+while (matchReport.firstChild) matchReport.removeChild(matchReport.firstChild);
+
+const table = document.createElement('table');
+const thead = document.createElement('thead');
+const headerRow = document.createElement('tr');
+['Rule', 'Sim', 'Lines', 'Notes'].forEach(text => {
+const th = document.createElement('th');
+th.textContent = text;
+headerRow.appendChild(th);
+});
+thead.appendChild(headerRow);
+table.appendChild(thead);
+
+const tbody = document.createElement('tbody');
+const fragment = document.createDocumentFragment();
+for (const r of reports) {
+if (!r) continue;
+const sim = r.bestSimilarity || 0;
+const colorClass = r.success
+? 'similarity-green'
+: (sim >= thresholdVal ? 'similarity-amber' : 'similarity-red');
+
+const tr = document.createElement('tr');
+
+const tdIndex = document.createElement('td');
+tdIndex.textContent = '#' + (r.index + 1);
+tr.appendChild(tdIndex);
+
+const tdSim = document.createElement('td');
+tdSim.className = colorClass;
+tdSim.textContent = sim + '%';
+tr.appendChild(tdSim);
+
+const tdLines = document.createElement('td');
+tdLines.textContent = r.success
+? `${r.originalLineCount ?? 0} → ${r.replacementLineCount ?? 0}`
+: '';
+tr.appendChild(tdLines);
+
+const tdNotes = document.createElement('td');
+if (r.success) {
+tdNotes.textContent = '✅';
+} else {
+tdNotes.textContent = '❌ ' + (r.failureReason || 'No match found');
+}
+tr.appendChild(tdNotes);
+
+fragment.appendChild(tr);
+}
+tbody.appendChild(fragment);
+table.appendChild(tbody);
+matchReport.appendChild(table);
+}
+
+function showStatus(msg, type) {
+if (!statusMsgEl) return;
+statusMsgEl.textContent = msg;
+statusMsgEl.className = 'status-msg ' + type;
+statusMsgEl.classList.remove('hidden');
+
+if (statusTimeout) clearTimeout(statusTimeout);
+statusTimeout = setTimeout(() => statusMsgEl.classList.add('hidden'), 6000);
+}
+
+function rebuildMode1RulesComplete(originalRawRules, patterns, usedPatterns, isLocked) {
+if (isLocked) return;
+
+const allLines = norm(originalRawRules).split('\n');
+const usedIndices = new Set();
+const allPatternIndices = new Set();
+
+patterns.forEach((pat, idx) => {
+let rangeStart = pat.lineIndices.searchStart;
+let rangeEnd = pat.lineIndices.replEnd;
+
+if (pat.lineIndices.sepIdx >= 0) {
+rangeStart = Math.min(rangeStart, pat.lineIndices.sepIdx);
+rangeEnd = Math.max(rangeEnd, pat.lineIndices.sepIdx);
+}
+
+for (let i = rangeStart; i <= rangeEnd; i++) {
+allPatternIndices.add(i);
+}
+if (usedPatterns.has(idx)) {
+for (let i = rangeStart; i <= rangeEnd; i++) {
+usedIndices.add(i);
+}
+}
+});
+
+const remainingPatternLines = [];
+const unrelatedLines = [];
+
+allLines.forEach((line, idx) => {
+if (usedIndices.has(idx)) return;
+if (allPatternIndices.has(idx)) {
+remainingPatternLines.push(line);
+} else {
+unrelatedLines.push(line);
+}
+});
+
+let newValue = remainingPatternLines.join('\n');
+if (unrelatedLines.length > 0) {
+if (newValue) newValue += '\n\n';
+newValue += unrelatedLines.join('\n');
+}
+patternArea.value = newValue;
+}
+
+// -------------------- Main Replace function --------------------
+async function Replace() {
+if (abortController) {
+abortController.abort();
+}
+abortController = new AbortController();
+const signal = abortController.signal;
+
+if (replaceBtn) {
+replaceBtn.disabled = true;
+replaceBtn.textContent = '⏳ Processing...';
+}
+
+if (!contentArea || !patternArea) {
+if (replaceBtn) { replaceBtn.disabled = false; replaceBtn.textContent = currentMode === 1 ? '⚡ Replace All' : '⚡ Append All'; }
+return;
+}
+
+let content = contentArea.value;
+let rules = patternArea.value;
+const originalRawRules = rules;
+
+content = stripMarkers(content);
+
+if (interpretEscapesToggle && interpretEscapesToggle.checked) {
+content = interpretEscapes(content);
+rules = interpretEscapes(rules);
+}
+
+const originalContent = content;
+const ellipsisEnabled = ellipsisWildcard ? ellipsisWildcard.checked : false;
+
+if (ellipsisEnabled) {
+rules = protectGlobalBoundaries(rules);
+rules = normalizeRulesText(rules);
+} else {
+rules = protectLiteralEllipsis(rules);
+}
+
+if (!content.trim() || !rules.trim()) {
+showStatus('⚠️ Both fields must be filled.', 'warning');
+if (replaceBtn) { replaceBtn.disabled = false; replaceBtn.textContent = currentMode === 1 ? '⚡ Replace All' : '⚡ Append All'; }
+return;
+}
+
+const similarityThreshold = Math.min(100, Math.max(0, parseInt(similarityRange ? similarityRange.value : 80, 10) || 0));
+const simMode1 = similarityThreshold;
+const simMode2 = similarityThreshold;
+
+const greedy = greedyEllipsis ? greedyEllipsis.checked : false;
+const applyMultipleMatches = allowAmbiguityToggle ? !allowAmbiguityToggle.checked : true;
+const tolerance = 0;
+
+let reports = [],
+newContent = content,
+totalApplied = 0;
+try {
+let result = null;
+if (currentMode === 1) {
+result = await ReplaceMode1(content, rules, simMode1, greedy, applyMultipleMatches, tolerance, originalContent, originalRawRules, signal, showStatus, updateStats);
+newContent = result.newContent;
+totalApplied = result.totalApplied;
+reports = result.reports;
+lastTotalRules = result.totalRules;
+lastUsedCount = result.usedCount;
+if (result.patterns) {
+rebuildMode1RulesComplete(originalRawRules, result.patterns, result.usedPatterns, lockedPattern ? lockedPattern.checked : false);
+updateStats();
+}
+} else {
+result = await ReplaceMode2(content, rules, simMode2, greedy, applyMultipleMatches, tolerance, signal, showStatus, updateStats, originalRawRules);
+newContent = result.newContent;
+totalApplied = result.totalApplied;
+reports = result.reports;
+lastTotalRules = result.totalRules;
+lastUsedCount = result.usedCount;
+
+if (!lockedPattern.checked && result.usedBlocks && result.usedBlocks.size) {
+const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'));
+const newBlocks = allBlocks.filter((_, idx) => !result.usedBlocks.has(idx));
+patternArea.value = newBlocks.map(b => b.searchLines.concat('', b.replLines).join('\n')).join('\n\n');
+updateStats();
+}
+}
+contentArea.value = newContent;
+lastAppliedCount = totalApplied;
+
+updateStats();
+const thresholdVal = similarityThreshold;
+renderReport(reports, thresholdVal);
+
+if (matchDetails) matchDetails.classList.remove('hidden');
+
+let msg = '';
+if (totalApplied > 0) msg = `✅ ${totalApplied} pattern(s) applied.`;
+else msg = '⚠️ No matches met conditions.';
+showStatus(msg, totalApplied > 0 ? 'info' : 'warning');
+} catch (err) {
+console.error(err);
+if (err.message === 'Operation cancelled') {
+showStatus('⏹️ Operation cancelled.', 'warning');
+} else {
+showStatus('❌ Error: ' + (err.message || err), 'warning');
+}
+} finally {
+if (replaceBtn) {
+replaceBtn.disabled = false;
+replaceBtn.textContent = currentMode === 1 ? '⚡ Replace All' : '⚡ Append All';
+}
+abortController = null;
+}
+}
+
+// -------------------- Initialization --------------------
+function init() {
+if (ellipsisWildcard) {
+ellipsisWildcardEnabled = ellipsisWildcard.checked;
+}
+if (lineWildcard) {
+lineWildcardEnabled = lineWildcard.checked;
+}
+if (showMarkersToggle) {
+showMarkers = showMarkersToggle.checked;
+} else {
+showMarkers = true;
+}
+
+const modeTabs = document.querySelectorAll('.mode-tab');
+setupKeyboardNav(modeTabs);
+
+modeTabs.forEach(tab => {
+tab.addEventListener('click', () => {
+modeTabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+tab.classList.add('active');
+tab.setAttribute('aria-selected', 'true');
+currentMode = parseInt(tab.dataset.mode, 10);
+if (mode1Controls) mode1Controls.classList.toggle('hidden', currentMode !== 1);
+if (mode2Controls) mode2Controls.classList.toggle('hidden', currentMode !== 2);
+if (organizeModeToggle && organizeModeToggle.closest) {
+organizeModeToggle.closest('.toggle-wrap').style.display = currentMode === 2 ? 'none' : '';
+}
+const msg = currentMode === 1 ?
+'⚡ Mode 1: Search block must match; replacement lines are applied in order.' :
+'⚡ Mode 2: Blocks separated by blank lines; search and replacement split by a blank line.';
+setModeHint(msg);
+if (replaceBtn) replaceBtn.textContent = currentMode === 1 ? '⚡ Replace All' : '⚡ Append All';
+updateWildcardDependencies();
+resetOpStats();
+updateStats();
+});
+});
+
+if (replaceBtn) replaceBtn.addEventListener('click', Replace);
+
+if (resetBtn) {
+resetBtn.addEventListener('click', () => {
+if (abortController) {
+abortController.abort();
+abortController = null;
+}
+if (contentArea) contentArea.value = '';
+if (patternArea) patternArea.value = '';
+
+if (ellipsisWildcard) ellipsisWildcard.checked = true;
+if (greedyEllipsis) greedyEllipsis.checked = true;
+if (lineWildcard) lineWildcard.checked = false;
+if (allowAmbiguityToggle) allowAmbiguityToggle.checked = true;
+if (organizeModeToggle) organizeModeToggle.checked = false;
+if (interpretEscapesToggle) interpretEscapesToggle.checked = false;
+if (lockedPattern) lockedPattern.checked = false;
+if (showMarkersToggle) showMarkersToggle.checked = true;
+if (similarityRange) similarityRange.value = 80;
+if (mode2Sim) mode2Sim.value = 80;
+if (mode2Tolerance) mode2Tolerance.value = 0;
+if (mode1Threshold) mode1Threshold.value = 2;
+if (mode2Threshold) mode2Threshold.value = 2;
+if (separatorInput) separatorInput.value = 'replace';
+
+ellipsisWildcardEnabled = true;
+lineWildcardEnabled = false;
+showMarkers = true;
+currentMode = 1;
+modeTabs.forEach(t => t.classList.remove('active'));
+const firstTab = document.querySelector('.mode-tab[data-mode="1"]');
+if (firstTab) firstTab.classList.add('active');
+if (mode1Controls) mode1Controls.classList.remove('hidden');
+if (mode2Controls) mode2Controls.classList.add('hidden');
+setModeHint('⚡ Mode 1: Search block must match; replacement lines are applied in order.');
+if (replaceBtn) replaceBtn.textContent = '⚡ Replace All';
+updateWildcardDependencies();
+resetOpStats();
+
+if (statusMsgEl) statusMsgEl.classList.add('hidden');
+if (matchDetails) matchDetails.classList.add('hidden');
+if (matchReport) {
+while (matchReport.firstChild) matchReport.removeChild(matchReport.firstChild);
+}
+if (statusMsgEl) statusMsgEl.textContent = '';
+clearCaches();
+updateStats();
+});
+}
+
+if (swapBtn) {
+swapBtn.addEventListener('click', () => {
+if (contentArea && patternArea) {
+const tmp = contentArea.value;
+contentArea.value = patternArea.value;
+patternArea.value = tmp;
+}
+resetOpStats();
+updateStats();
+});
+}
+
+window.addEventListener('beforeunload', () => {
+clearTimeout(statsTimer);
+clearTimeout(statusTimeout);
+if (abortController) {
+abortController.abort();
+abortController = null;
+}
+});
+
+bindLiveUpdate();
+updateWildcardDependencies();
+updateStats();
+}
+
+// Start when DOM is ready
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+init();
+} else {
+document.addEventListener('DOMContentLoaded', init);
+}
+</script>
