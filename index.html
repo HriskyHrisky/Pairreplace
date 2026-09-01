@@ -158,7 +158,6 @@ select { padding: 4px 8px; border-radius: 8px; border: 1.5px solid #d1d9e6; font
 
 <div id="mode1Controls" class="mode-controls">
 <div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace" /></label></div>
-<div class="group"><label>Min matched lines: <input type="number" id="mode1Threshold" value="2" min="1" max="20" aria-label="Minimum matched lines for Mode 1" /></label></div>
 </div>
 <div id="mode2Controls" class="mode-controls hidden">
 <div class="group"><label>Min matched lines: <input type="number" id="mode2Threshold" value="2" min="1" max="20" aria-label="Minimum matched lines for Mode 2" /></label></div>
@@ -1744,21 +1743,43 @@ return '';
 const originalMatchedLines = work.slice(match.start, match.end);
 const replacement = buildMode1Replacement(replLines, flatCaptures, originalMatchedLines);
 
-const originalBlock = originalMatchedLines.join('\n');
-const newBlock = replacement.join('\n');
-if (collapseWS(originalBlock) === collapseWS(newBlock)) {
-reports.push({
-index: pi,
-bestSimilarity: Math.round(match.avgSim),
-success: false,
-failureReason: 'Replacement produces identical content (no-op)',
-originalLineCount: match.end - match.start,
-replacementLineCount: replacement.length
-});
-continue;
-}
+                const originalBlock = originalMatchedLines.join('\n');
+                const newBlock = replacement.join('\n');
+                const lineCount = match.end - match.start;
+                if (collapseWS(originalBlock) === collapseWS(newBlock)) {
+                    if (lineCount <= 3) {
+                        applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+                        totalApplied++;
+                        usedPatterns.add(pi);
+                        reports.push({
+                            index: pi,
+                            bestSimilarity: Math.round(match.avgSim),
+                            success: true,
+                            originalLineCount: lineCount,
+                            replacementLineCount: replacement.length,
+                            failureReason: null,
+                            identicalApplied: true
+                        });
+                        markIndexDirty();
+                    } else {
+                        applyReplacementAndAdjustMarkers(match.start, match.end, []);
+                        totalApplied++;
+                        usedPatterns.add(pi);
+                        reports.push({
+                            index: pi,
+                            bestSimilarity: Math.round(match.avgSim),
+                            success: true,
+                            originalLineCount: lineCount,
+                            replacementLineCount: 0,
+                            failureReason: 'Deleted – identical to part of textarea1 (>3 lines)',
+                            deleted: true
+                        });
+                        markIndexDirty();
+                    }
+                    continue;
+                }
 
-applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+                applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
 totalApplied++;
 usedPatterns.add(pi);
 reports.push({
@@ -1970,26 +1991,56 @@ if (Math.abs(cand.score - bestMatch.score) <= margin) {
 markers.push({ pos: cand.index + globalOffset, kind: 'ambiguity' });
 }
 }
-const flatCaptures = (bestMatch.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
-const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
-const originalBlock = work.slice(bestMatch.index, bestMatch.end).join('\n');
-const newBlock = replacement.join('\n');
-if (collapseWS(originalBlock) !== collapseWS(newBlock)) {
-applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
-totalApplied++;
-usedBlocks.add(bi);
-reports.push({
-index: bi,
-bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
-success: true,
-originalLineCount: bestMatch.end - bestMatch.index,
-replacementLineCount: replacement.length,
-failureReason: null
-});
-markIndexDirty();
-} else {
-reports.push({ index: bi, success: false, failureReason: 'Replacement identical (no-op)' });
-}
+            const flatCaptures = (bestMatch.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
+            const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
+            const originalBlock = work.slice(bestMatch.index, bestMatch.end).join('\n');
+            const newBlock = replacement.join('\n');
+            const lineCount = bestMatch.end - bestMatch.index;
+            if (collapseWS(originalBlock) === collapseWS(newBlock)) {
+                if (lineCount <= 3) {
+                    applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
+                    totalApplied++;
+                    usedBlocks.add(bi);
+                    reports.push({
+                        index: bi,
+                        bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
+                        success: true,
+                        originalLineCount: lineCount,
+                        replacementLineCount: replacement.length,
+                        failureReason: null,
+                        identicalApplied: true
+                    });
+                    markIndexDirty();
+                } else {
+                    applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, []);
+                    totalApplied++;
+                    usedBlocks.add(bi);
+                    reports.push({
+                        index: bi,
+                        bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
+                        success: true,
+                        originalLineCount: lineCount,
+                        replacementLineCount: 0,
+                        failureReason: 'Deleted – identical to part of textarea1 (>3 lines)',
+                        deleted: true
+                    });
+                    markIndexDirty();
+                }
+                continue;
+            }
+
+            applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
+            totalApplied++;
+            usedBlocks.add(bi);
+            reports.push({
+                index: bi,
+                bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
+                success: true,
+                originalLineCount: lineCount,
+                replacementLineCount: replacement.length,
+                failureReason: null
+            });
+            markIndexDirty();
 } else {
 const matchesToApply = bestCandidates.map(c => ({
 start: c.index,
@@ -2006,28 +2057,58 @@ for (const m of matchesToApply) {
 if (selected.some(s => !(m.end <= s.start || m.start >= s.end))) continue;
 selected.push(m);
 }
-for (const match of selected) {
-const flatCaptures = (match.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
-const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
-const originalBlock = work.slice(match.start, match.end).join('\n');
-const newBlock = replacement.join('\n');
-if (collapseWS(originalBlock) !== collapseWS(newBlock)) {
-applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
-totalApplied++;
-usedBlocks.add(bi);
-reports.push({
-index: bi,
-bestSimilarity: Math.round(match.avgSim),
-success: true,
-originalLineCount: match.end - match.start,
-replacementLineCount: replacement.length,
-failureReason: null
-});
-markIndexDirty();
-} else {
-reports.push({ index: bi, success: false, failureReason: 'Replacement identical (no-op)' });
-}
-}
+            for (const match of selected) {
+                const flatCaptures = (match.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
+                const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
+                const originalBlock = work.slice(match.start, match.end).join('\n');
+                const newBlock = replacement.join('\n');
+                const lineCount = match.end - match.start;
+                if (collapseWS(originalBlock) === collapseWS(newBlock)) {
+                    if (lineCount <= 3) {
+                        applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+                        totalApplied++;
+                        usedBlocks.add(bi);
+                        reports.push({
+                            index: bi,
+                            bestSimilarity: Math.round(match.avgSim),
+                            success: true,
+                            originalLineCount: lineCount,
+                            replacementLineCount: replacement.length,
+                            failureReason: null,
+                            identicalApplied: true
+                        });
+                        markIndexDirty();
+                    } else {
+                        applyReplacementAndAdjustMarkers(match.start, match.end, []);
+                        totalApplied++;
+                        usedBlocks.add(bi);
+                        reports.push({
+                            index: bi,
+                            bestSimilarity: Math.round(match.avgSim),
+                            success: true,
+                            originalLineCount: lineCount,
+                            replacementLineCount: 0,
+                            failureReason: 'Deleted – identical to part of textarea1 (>3 lines)',
+                            deleted: true
+                        });
+                        markIndexDirty();
+                    }
+                    continue;
+                }
+
+                applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+                totalApplied++;
+                usedBlocks.add(bi);
+                reports.push({
+                    index: bi,
+                    bestSimilarity: Math.round(match.avgSim),
+                    success: true,
+                    originalLineCount: lineCount,
+                    replacementLineCount: replacement.length,
+                    failureReason: null
+                });
+                markIndexDirty();
+            }
 }
 await new Promise(r => setTimeout(r, 0));
 }
@@ -2409,7 +2490,8 @@ if (patternArea) patternArea.addEventListener('input', () => { resetOpStats(); u
 if (similarityRange) similarityRange.addEventListener('input', updateStats);
 if (mode2Sim) mode2Sim.addEventListener('input', updateStats);
 if (separatorInput) separatorInput.addEventListener('input', updateStats);
-if (mode1Threshold) mode1Threshold.addEventListener('input', updateStats);
+// ‼️
+
 if (mode2Threshold) mode2Threshold.addEventListener('input', updateStats);
 if (mode2Tolerance) mode2Tolerance.addEventListener('input', updateStats);
 if (lockedPattern) lockedPattern.addEventListener('change', updateStats);
@@ -2503,13 +2585,19 @@ tdLines.textContent = r.success
 : '';
 tr.appendChild(tdLines);
 
-const tdNotes = document.createElement('td');
-if (r.success) {
-tdNotes.textContent = '✅';
-} else {
-tdNotes.textContent = '❌ ' + (r.failureReason || 'No match found');
-}
-tr.appendChild(tdNotes);
+            const tdNotes = document.createElement('td');
+            if (r.success) {
+                if (r.deleted) {
+                    tdNotes.textContent = '🗑️ Deleted – identical to part of textarea1';
+                } else if (r.identicalApplied) {
+                    tdNotes.textContent = '✅ Identical to part of textarea1 (≤3 lines)';
+                } else {
+                    tdNotes.textContent = '✅';
+                }
+            } else {
+                tdNotes.textContent = '❌ ' + (r.failureReason || 'No match found');
+            }
+            tr.appendChild(tdNotes);
 
 fragment.appendChild(tr);
 }
@@ -2748,7 +2836,8 @@ if (showMarkersToggle) showMarkersToggle.checked = true;
 if (similarityRange) similarityRange.value = 80;
 if (mode2Sim) mode2Sim.value = 80;
 if (mode2Tolerance) mode2Tolerance.value = 0;
-if (mode1Threshold) mode1Threshold.value = 2;
+// ‼️
+
 if (mode2Threshold) mode2Threshold.value = 2;
 if (separatorInput) separatorInput.value = 'replace';
 
