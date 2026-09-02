@@ -1,3 +1,6 @@
+review in text (no codeblock pairs)
+
+Are the features changed and patched?
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1693,37 +1696,76 @@ reports.push({ index: pi, bestSimilarity: 0, success: false, failureReason: best
 continue;
 }
 
-allCandidates.sort((a, b) => {
-if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
-return a.start - b.start;
-});
-const maxScore = allCandidates[0].avgSim;
-const margin = 5;
-const bestMatches = allCandidates.filter(m => Math.abs(m.avgSim - maxScore) < 1e-9);
+        const hasWildcard = items.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
 
-let matchesToProcess = [];
-if (applyMultipleMatches) {
-const selected = [];
-for (const cand of allCandidates) {
-const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end));
-if (!overlaps) selected.push(cand);
-}
-matchesToProcess = selected;
-if (matchesToProcess.length > 1000) {
-matchesToProcess = matchesToProcess.slice(0, 1000);
-}
-matchesToProcess.sort((a, b) => b.start - a.start);
-} else {
-matchesToProcess = [bestMatches[0]];
-if (shouldShowMarkers) {
-for (const cand of allCandidates) {
-if (cand === bestMatches[0]) continue;
-if (cand.avgSim >= maxScore - margin) {
-markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end });
-}
-}
-}
-}
+        if (!hasWildcard) {
+            allCandidates.sort((a, b) => {
+                if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+                const lenA = a.end - a.start;
+                const lenB = b.end - b.start;
+                if (lenB !== lenA) return lenB - lenA;
+                return a.start - b.start;
+            });
+
+            const maxScore = allCandidates[0].avgSim;
+            const topSimCandidates = allCandidates.filter(m => Math.abs(m.avgSim - maxScore) < 1e-9);
+            const maxLength = Math.max(...topSimCandidates.map(c => c.end - c.start));
+            const topLengthCandidates = topSimCandidates.filter(c => (c.end - c.start) === maxLength);
+
+            let matchesToProcess = [];
+            if (applyMultipleMatches) {
+                const selected = [];
+                for (const cand of allCandidates) {
+                    const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end));
+                    if (!overlaps) selected.push(cand);
+                }
+                matchesToProcess = selected;
+                if (matchesToProcess.length > 1000) {
+                    matchesToProcess = matchesToProcess.slice(0, 1000);
+                }
+                matchesToProcess.sort((a, b) => b.start - a.start);
+            } else {
+                matchesToProcess = [topLengthCandidates[0]];
+                if (shouldShowMarkers && topLengthCandidates.length > 1) {
+                    for (let i = 1; i < topLengthCandidates.length; i++) {
+                        const cand = topLengthCandidates[i];
+                        markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end });
+                    }
+                }
+            }
+        } else {
+            allCandidates.sort((a, b) => {
+                if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+                return a.start - b.start;
+            });
+            const maxScore = allCandidates[0].avgSim;
+            const margin = 5;
+            const bestMatches = allCandidates.filter(m => Math.abs(m.avgSim - maxScore) < 1e-9);
+
+            let matchesToProcess = [];
+            if (applyMultipleMatches) {
+                const selected = [];
+                for (const cand of allCandidates) {
+                    const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end));
+                    if (!overlaps) selected.push(cand);
+                }
+                matchesToProcess = selected;
+                if (matchesToProcess.length > 1000) {
+                    matchesToProcess = matchesToProcess.slice(0, 1000);
+                }
+                matchesToProcess.sort((a, b) => b.start - a.start);
+            } else {
+                matchesToProcess = [bestMatches[0]];
+                if (shouldShowMarkers) {
+                    for (const cand of allCandidates) {
+                        if (cand === bestMatches[0]) continue;
+                        if (cand.avgSim >= maxScore - margin) {
+                            markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end });
+                        }
+                    }
+                }
+            }
+        }
 
 if (matchesToProcess.length === 0 && allCandidates.length > 0) {
 reports.push({
@@ -1742,54 +1784,44 @@ return '';
 });
 const originalMatchedLines = work.slice(match.start, match.end);
 const replacement = buildMode1Replacement(replLines, flatCaptures, originalMatchedLines);
+const originalBlock = originalMatchedLines.join('\n');
+const newBlock = replacement.join('\n');
 
-                const originalBlock = originalMatchedLines.join('\n');
-                const newBlock = replacement.join('\n');
-                const lineCount = match.end - match.start;
-                if (collapseWS(originalBlock) === collapseWS(newBlock)) {
-                    if (lineCount <= 3) {
-                        applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
-                        totalApplied++;
-                        usedPatterns.add(pi);
-                        reports.push({
-                            index: pi,
-                            bestSimilarity: Math.round(match.avgSim),
-                            success: true,
-                            originalLineCount: lineCount,
-                            replacementLineCount: replacement.length,
-                            failureReason: null,
-                            identicalApplied: true
-                        });
-                        markIndexDirty();
-                    } else {
-                        applyReplacementAndAdjustMarkers(match.start, match.end, []);
-                        totalApplied++;
-                        usedPatterns.add(pi);
-                        reports.push({
-                            index: pi,
-                            bestSimilarity: Math.round(match.avgSim),
-                            success: true,
-                            originalLineCount: lineCount,
-                            replacementLineCount: 0,
-                            failureReason: 'Deleted – identical to part of textarea1 (>3 lines)',
-                            deleted: true
-                        });
-                        markIndexDirty();
-                    }
-                    continue;
-                }
+const effectiveWildcards = countEffectiveWildcards(replLines, flatCaptures);
+if (modeStatusBadge) {
+    if (isOrganizeMode) {
+        modeStatusBadge.textContent = `🗂️ Organize (${effectiveWildcards} wildcards)`;
+    } else {
+        modeStatusBadge.textContent = `📏 Normal (${effectiveWildcards} wildcards)`;
+    }
+}
 
-                applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
-totalApplied++;
-usedPatterns.add(pi);
-reports.push({
-index: pi,
-bestSimilarity: Math.round(match.avgSim),
-success: true,
-originalLineCount: match.end - match.start,
-replacementLineCount: replacement.length,
-failureReason: null
-});
+if (replacement.length > 3 && collapseWS(originalBlock) === collapseWS(newBlock)) {
+    // identical and replacement has more than 3 lines: skip applying, just remove rule
+    totalApplied++;
+    usedPatterns.add(pi);
+    reports.push({
+        index: pi,
+        bestSimilarity: Math.round(match.avgSim),
+        success: true,
+        originalLineCount: match.end - match.start,
+        replacementLineCount: replacement.length,
+        failureReason: null,
+        identicalSkipped: true
+    });
+} else {
+    applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+    totalApplied++;
+    usedPatterns.add(pi);
+    reports.push({
+        index: pi,
+        bestSimilarity: Math.round(match.avgSim),
+        success: true,
+        originalLineCount: match.end - match.start,
+        replacementLineCount: replacement.length,
+        failureReason: null
+    });
+}
 markIndexDirty();
 }
 }
@@ -1981,135 +2013,154 @@ reports.push({ index: bi, success: false, failureReason: `No suitable signature 
 continue;
 }
 
-const bestMatch = bestCandidates.reduce((a, b) => (a.score > b.score ? a : b));
+        const hasWildcard = searchLines.some(line =>
+            line.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) ||
+            line.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)
+        );
 
-if (!applyMultipleMatches) {
-const margin = 5;
-for (const cand of bestCandidates) {
-if (cand === bestMatch) continue;
-if (Math.abs(cand.score - bestMatch.score) <= margin) {
-markers.push({ pos: cand.index + globalOffset, kind: 'ambiguity' });
-}
-}
-            const flatCaptures = (bestMatch.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
-            const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
-            const originalBlock = work.slice(bestMatch.index, bestMatch.end).join('\n');
-            const newBlock = replacement.join('\n');
-            const lineCount = bestMatch.end - bestMatch.index;
-            if (collapseWS(originalBlock) === collapseWS(newBlock)) {
-                if (lineCount <= 3) {
-                    applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
-                    totalApplied++;
-                    usedBlocks.add(bi);
-                    reports.push({
-                        index: bi,
-                        bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
-                        success: true,
-                        originalLineCount: lineCount,
-                        replacementLineCount: replacement.length,
-                        failureReason: null,
-                        identicalApplied: true
-                    });
-                    markIndexDirty();
-                } else {
-                    applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, []);
-                    totalApplied++;
-                    usedBlocks.add(bi);
-                    reports.push({
-                        index: bi,
-                        bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
-                        success: true,
-                        originalLineCount: lineCount,
-                        replacementLineCount: 0,
-                        failureReason: 'Deleted – identical to part of textarea1 (>3 lines)',
-                        deleted: true
-                    });
-                    markIndexDirty();
+        let sortedCandidates;
+        if (!hasWildcard) {
+            sortedCandidates = [...bestCandidates].sort((a, b) => {
+                if (Math.abs(b.score - a.score) > 1e-9) return b.score - a.score;
+                const lenA = a.end - a.index;
+                const lenB = b.end - b.index;
+                if (lenB !== lenA) return lenB - lenA;
+                return a.index - b.index;
+            });
+        } else {
+            sortedCandidates = [...bestCandidates].sort((a, b) => {
+                if (Math.abs(b.score - a.score) > 1e-9) return b.score - a.score;
+                return a.index - b.index;
+            });
+        }
+
+        const bestMatch = sortedCandidates[0];
+
+        if (!applyMultipleMatches) {
+            if (!hasWildcard) {
+                const maxScore = bestMatch.score;
+                const topSimCandidates = sortedCandidates.filter(c => Math.abs(c.score - maxScore) < 1e-9);
+                const maxLength = Math.max(...topSimCandidates.map(c => c.end - c.index));
+                const topLengthCandidates = topSimCandidates.filter(c => (c.end - c.index) === maxLength);
+                if (shouldShowMarkers && topLengthCandidates.length > 1) {
+                    for (let i = 1; i < topLengthCandidates.length; i++) {
+                        const cand = topLengthCandidates[i];
+                        markers.push({ pos: cand.index + globalOffset, kind: 'ambiguity' });
+                    }
                 }
-                continue;
+            } else {
+                const margin = 5;
+                for (const cand of sortedCandidates) {
+                    if (cand === bestMatch) continue;
+                    if (Math.abs(cand.score - bestMatch.score) <= margin) {
+                        markers.push({ pos: cand.index + globalOffset, kind: 'ambiguity' });
+                    }
+                }
             }
 
-            applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
-            totalApplied++;
-            usedBlocks.add(bi);
-            reports.push({
-                index: bi,
-                bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
-                success: true,
-                originalLineCount: lineCount,
-                replacementLineCount: replacement.length,
-                failureReason: null
-            });
-            markIndexDirty();
-} else {
-const matchesToApply = bestCandidates.map(c => ({
-start: c.index,
-end: c.end,
-avgSim: c.score / bestSearchLines.length,
-captured: c.captured || []
-}));
-matchesToApply.sort((a, b) => {
-if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
-return a.start - b.start;
-});
-const selected = [];
-for (const m of matchesToApply) {
-if (selected.some(s => !(m.end <= s.start || m.start >= s.end))) continue;
-selected.push(m);
-}
-            for (const match of selected) {
-                const flatCaptures = (match.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
-                const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
-                const originalBlock = work.slice(match.start, match.end).join('\n');
-                const newBlock = replacement.join('\n');
-                const lineCount = match.end - match.start;
-                if (collapseWS(originalBlock) === collapseWS(newBlock)) {
-                    if (lineCount <= 3) {
-                        applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
-                        totalApplied++;
-                        usedBlocks.add(bi);
-                        reports.push({
-                            index: bi,
-                            bestSimilarity: Math.round(match.avgSim),
-                            success: true,
-                            originalLineCount: lineCount,
-                            replacementLineCount: replacement.length,
-                            failureReason: null,
-                            identicalApplied: true
-                        });
-                        markIndexDirty();
-                    } else {
-                        applyReplacementAndAdjustMarkers(match.start, match.end, []);
-                        totalApplied++;
-                        usedBlocks.add(bi);
-                        reports.push({
-                            index: bi,
-                            bestSimilarity: Math.round(match.avgSim),
-                            success: true,
-                            originalLineCount: lineCount,
-                            replacementLineCount: 0,
-                            failureReason: 'Deleted – identical to part of textarea1 (>3 lines)',
-                            deleted: true
-                        });
-                        markIndexDirty();
-                    }
-                    continue;
-                }
+            const flatCaptures = (bestMatch.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
+            const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
+            const lineCount = bestMatch.end - bestMatch.index;
+            const originalBlock = work.slice(bestMatch.index, bestMatch.end).join('\n');
+            const newBlock = replacement.join('\n');
 
-                applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+            const effectiveWildcards = countEffectiveWildcards(bestReplLines, flatCaptures);
+            if (modeStatusBadge) {
+                modeStatusBadge.textContent = `📏 Mode 2 (${effectiveWildcards} wildcards)`;
+            }
+
+            if (replacement.length > 3 && collapseWS(originalBlock) === collapseWS(newBlock)) {
                 totalApplied++;
                 usedBlocks.add(bi);
                 reports.push({
                     index: bi,
-                    bestSimilarity: Math.round(match.avgSim),
+                    bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
+                    success: true,
+                    originalLineCount: lineCount,
+                    replacementLineCount: replacement.length,
+                    failureReason: null,
+                    identicalSkipped: true
+                });
+            } else {
+                applyReplacementAndAdjustMarkers(bestMatch.index, bestMatch.end, replacement);
+                totalApplied++;
+                usedBlocks.add(bi);
+                reports.push({
+                    index: bi,
+                    bestSimilarity: Math.round(bestMatch.score / bestSearchLines.length),
                     success: true,
                     originalLineCount: lineCount,
                     replacementLineCount: replacement.length,
                     failureReason: null
                 });
+            }
+            markIndexDirty();
+        } else {
+            const matchesToApply = sortedCandidates.map(c => ({
+                start: c.index,
+                end: c.end,
+                avgSim: c.score / bestSearchLines.length,
+                captured: c.captured || []
+            }));
+            if (!hasWildcard) {
+                matchesToApply.sort((a, b) => {
+                    if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+                    const lenA = a.end - a.start;
+                    const lenB = b.end - b.start;
+                    if (lenB !== lenA) return lenB - lenA;
+                    return a.start - b.start;
+                });
+            } else {
+                matchesToApply.sort((a, b) => {
+                    if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+                    return a.start - b.start;
+                });
+            }
+            const selected = [];
+            for (const m of matchesToApply) {
+                if (selected.some(s => !(m.end <= s.start || m.start >= s.end))) continue;
+                selected.push(m);
+            }
+            for (const match of selected) {
+                const flatCaptures = (match.captured || []).map(c => Array.isArray(c) ? c.join('\n') : c);
+                const replacement = buildMode2Replacement(bestReplLines, flatCaptures);
+                const lineCount = match.end - match.start;
+                const originalBlock = work.slice(match.start, match.end).join('\n');
+                const newBlock = replacement.join('\n');
+
+                const effectiveWildcards = countEffectiveWildcards(bestReplLines, flatCaptures);
+                if (modeStatusBadge) {
+                    modeStatusBadge.textContent = `📏 Mode 2 (${effectiveWildcards} wildcards)`;
+                }
+
+                if (replacement.length > 3 && collapseWS(originalBlock) === collapseWS(newBlock)) {
+                    totalApplied++;
+                    usedBlocks.add(bi);
+                    reports.push({
+                        index: bi,
+                        bestSimilarity: Math.round(match.avgSim),
+                        success: true,
+                        originalLineCount: lineCount,
+                        replacementLineCount: replacement.length,
+                        failureReason: null,
+                        identicalSkipped: true
+                    });
+                } else {
+                    applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+                    totalApplied++;
+                    usedBlocks.add(bi);
+                    reports.push({
+                        index: bi,
+                        bestSimilarity: Math.round(match.avgSim),
+                        success: true,
+                        originalLineCount: lineCount,
+                        replacementLineCount: replacement.length,
+                        failureReason: null
+                    });
+                }
                 markIndexDirty();
             }
-}
+        }
 await new Promise(r => setTimeout(r, 0));
 }
 
@@ -2286,40 +2337,34 @@ return { allPairs };
 }
 
 function buildMode1Replacement(replLines, captures, originalMatchedLines) {
-const restoredRepl = replLines.map(line => restoreLiteralEllipsis(line));
+    const flatCaptures = captures.map(c => Array.isArray(c) ? c.join('\n') : String(c));
+    let seqIdx = 0;
+    const outputLines = [];
 
-const hasActiveWildcards = replLines.some(line =>
-line.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) ||
-line.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)
-);
+    for (let line of replLines) {
+        line = restoreLiteralEllipsis(line);
+        if (line.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) || line.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)) {
+            const parts = line.split(new RegExp(`(${WILDCARD_ELLIPSIS_PLACEHOLDER}|${WILDCARD_THREE_DOTS_PLACEHOLDER})`));
+            let newLine = '';
+            for (const part of parts) {
+                if (part === WILDCARD_ELLIPSIS_PLACEHOLDER || part === WILDCARD_THREE_DOTS_PLACEHOLDER) {
+                    if (seqIdx < flatCaptures.length) {
+                        newLine += flatCaptures[seqIdx];
+                        seqIdx++;
+                    } else {
+                        newLine += '';
+                    }
+                } else {
+                    newLine += part;
+                }
+            }
+            outputLines.push(cleanupWildcardPlaceholders(newLine));
+        } else {
+            outputLines.push(cleanupWildcardPlaceholders(line));
+        }
+    }
 
-if (!hasActiveWildcards) {
-return restoredRepl.map(line => cleanupWildcardPlaceholders(line));
-}
-
-const flatCaptures = captures.map(c => Array.isArray(c) ? c.join('\n') : String(c));
-let seqIdx = 0;
-const outputLines = [];
-
-for (const line of restoredRepl) {
-const tokens = tokenizeEllipses(line, true, true);
-let newLine = '';
-for (const tok of tokens) {
-if (tok.type === 'wildcard' || (tok.type === 'wildcard_candidate' && tok.raw)) {
-if (seqIdx < flatCaptures.length) {
-newLine += flatCaptures[seqIdx];
-seqIdx++;
-} else {
-newLine += tok.raw || '…';
-}
-} else {
-newLine += tok.text || '';
-}
-}
-outputLines.push(cleanupWildcardPlaceholders(restoreLiteralEllipsis(newLine)));
-}
-
-return outputLines;
+    return outputLines;
 }
 
 function buildMode2Replacement(replLines, captures) {
@@ -2379,6 +2424,28 @@ idx += WILDCARD_THREE_DOTS_PLACEHOLDER.length;
 }
 }
 return count;
+}
+
+function countEffectiveWildcards(replLines, captures) {
+    let effective = 0;
+    let capIdx = 0;
+    for (let line of replLines) {
+        line = restoreLiteralEllipsis(line);
+        if (line.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) || line.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)) {
+            const parts = line.split(new RegExp(`(${WILDCARD_ELLIPSIS_PLACEHOLDER}|${WILDCARD_THREE_DOTS_PLACEHOLDER})`));
+            for (const part of parts) {
+                if (part === WILDCARD_ELLIPSIS_PLACEHOLDER || part === WILDCARD_THREE_DOTS_PLACEHOLDER) {
+                    const capture = capIdx < captures.length ? captures[capIdx] : '';
+                    capIdx++;
+                    const cleaned = stripInvisibleChars(capture).replace(/[…\.]/g, '').trim();
+                    if (cleaned.length > 0) {
+                        effective++;
+                    }
+                }
+            }
+        }
+    }
+    return effective;
 }
 
 // -------------------- Stats and UI helpers (unchanged) --------------------
@@ -2490,7 +2557,6 @@ if (patternArea) patternArea.addEventListener('input', () => { resetOpStats(); u
 if (similarityRange) similarityRange.addEventListener('input', updateStats);
 if (mode2Sim) mode2Sim.addEventListener('input', updateStats);
 if (separatorInput) separatorInput.addEventListener('input', updateStats);
-// ‼️
 
 if (mode2Threshold) mode2Threshold.addEventListener('input', updateStats);
 if (mode2Tolerance) mode2Tolerance.addEventListener('input', updateStats);
@@ -2587,8 +2653,8 @@ tr.appendChild(tdLines);
 
             const tdNotes = document.createElement('td');
             if (r.success) {
-                if (r.deleted) {
-                    tdNotes.textContent = '🗑️ Deleted – identical to part of textarea1';
+                if (r.identicalSkipped) {
+                    tdNotes.textContent = '🔁 Removed from rules (identical >3 lines)';
                 } else if (r.identicalApplied) {
                     tdNotes.textContent = '✅ Identical to part of textarea1 (≤3 lines)';
                 } else {
@@ -2836,7 +2902,6 @@ if (showMarkersToggle) showMarkersToggle.checked = true;
 if (similarityRange) similarityRange.value = 80;
 if (mode2Sim) mode2Sim.value = 80;
 if (mode2Tolerance) mode2Tolerance.value = 0;
-// ‼️
 
 if (mode2Threshold) mode2Threshold.value = 2;
 if (separatorInput) separatorInput.value = 'replace';
