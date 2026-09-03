@@ -248,7 +248,7 @@ let protectBoundariesEnabled = true;
 let customIdentifierRegex = null;
 
 // Placeholders
-const PLACEHOLDER_PREFIX = `\u0000\u0001\u0002\u0003WILD${Math.random().toString(36).slice(2, 10)}\u0003\u0002\u0001\u0000`;
+const PLACEHOLDER_PREFIX = `__WILDCARD_${Math.random().toString(36).slice(2, 10)}__`;
 const LITERAL_ELLIPSIS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'LEL';
 const LITERAL_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'LTD';
 const WILDCARD_ELLIPSIS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WEL';
@@ -702,12 +702,14 @@ return { found: true, pos: startPos + chosen.index, matchedLength: chosen.length
 }
 function matchLiteralAtPosition(text, pos, literal) {
 const sub = text.slice(pos);
+if (sub.startsWith(literal)) {
+return { success: true, endPos: pos + literal.length };
+}
 const regex = buildFlexibleRegex(literal);
 const match = regex.exec(sub);
 if (!match || match.index !== 0) return { success: false };
 return { success: true, endPos: pos + match[0].length };
 }
-
 function matchInlineWildcardTokens(contentStr, tokens, isOrganizeMode = false, greedy = false, threshold = 80, tolerance = 0, startPos = 0) {
 const haystack = contentStr.slice(startPos);
 const filteredTokens = tokens.filter(t => t.type !== 'literal' || t.text !== '');
@@ -730,7 +732,7 @@ const result = findLiteralTolerant(haystack, pos, nextLit.text, greedy);
 if (!result.found) return null;
 captures.push(haystack.substring(pos, result.pos));
 pos = result.pos + result.matchedLength;
-i = nextIdx;
+i = nextIdx + 1;
 } else {
 captures.push(haystack.substring(pos));
 pos = haystack.length;
@@ -1637,10 +1639,10 @@ failureReason: result.failureReason || 'No matching block found'
 });
 }
 } else {
-const { items } = buildPatternItems(searchLines, lineWildcardEnabled);
-const bookend = getBookendAnchors(items);
+let { items } = buildPatternItems(searchLines, lineWildcardEnabled);
+let bookend = getBookendAnchors(items);
 
-const minPatternLines = items.reduce((acc, it) => {
+let minPatternLines = items.reduce((acc, it) => {
 if (it.type === 'literal_block') return acc + it.text.split('\n').length;
 if (it.type === 'inline_pattern') return acc + 1;
 return acc;
@@ -1672,7 +1674,7 @@ if (validLast.length > 0) startMax = Math.max(...validLast);
 }
 if (items[0]?.type === 'wildcard') startMin = 0;
 
-const allCandidates = [];
+let allCandidates = [];
 let bestFailureReason = 'No full match';
 for (let i = startMin; i <= startMax; i++) {
 if (signal?.aborted) throw new Error('Operation cancelled');
@@ -1688,12 +1690,36 @@ await new Promise(r => setTimeout(r, 0));
 }
 }
 
+let hasWildcard = false;
+
+if (allCandidates.length === 0) {
+if (ellipsisWildcardEnabled && (searchLines.some(l => l.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) || l.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)))) {
+const originalEllipsis = ellipsisWildcardEnabled;
+ellipsisWildcardEnabled = false;
+const literalSearchLines = searchLines.map(l => l.split(WILDCARD_ELLIPSIS_PLACEHOLDER).join('…').split(WILDCARD_THREE_DOTS_PLACEHOLDER).join('...'));
+const literalReplLines = replLines.map(l => l.split(WILDCARD_ELLIPSIS_PLACEHOLDER).join('…').split(WILDCARD_THREE_DOTS_PLACEHOLDER).join('...'));
+({ items } = buildPatternItems(literalSearchLines, lineWildcardEnabled));
+startMin = 0;
+startMax = Math.max(0, work.length - 1);
+allCandidates = [];
+for (let i = startMin; i <= startMax; i++) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const res = matchPatternLineBased(work, i, items, threshold, greedy, 0);
+if (res.success) {
+allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
+}
+}
+ellipsisWildcardEnabled = originalEllipsis;
+replLines.length = 0;
+replLines.push(...literalReplLines);
+}
 if (allCandidates.length === 0) {
 reports.push({ index: pi, bestSimilarity: 0, success: false, failureReason: bestFailureReason });
 continue;
 }
+}
 
-const hasWildcard = items.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
+hasWildcard = items.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
 
 let matchesToProcess = [];
 
@@ -2346,8 +2372,13 @@ let newLine = '';
 for (const part of parts) {
 if (part === WILDCARD_ELLIPSIS_PLACEHOLDER || part === WILDCARD_THREE_DOTS_PLACEHOLDER) {
 if (seqIdx < flatCaptures.length) {
-newLine += flatCaptures[seqIdx];
+const captured = flatCaptures[seqIdx];
 seqIdx++;
+if (captured && captured.length > 0) {
+newLine += captured;
+} else {
+newLine += part;
+}
 } else {
 newLine += part;
 }
