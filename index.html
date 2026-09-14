@@ -149,7 +149,6 @@ select { padding: 4px 8px; border-radius: 8px; border: 1.5px solid #d1d9e6; font
 <span class="stat-badge">✅ Replacements <span id="appliedCount">0</span></span>
 <span class="stat-badge">📋 Rules <span id="totalRules">0</span></span>
 <span class="stat-badge">✔️ Used <span id="usedRules">0</span></span>
-<span class="stat-badge">⏳ Leftover <span id="leftoverRules">0</span></span>
 <span id="mode1Stats" class="stat-badge">🔹 Valid: <span id="patternValid">0</span> / Potential: <span id="patternPotential">0</span></span>
 <span id="mode2BlockCount" class="stat-badge hidden">🧩 Blocks: <span id="blockCountVal">0</span></span>
 </div>
@@ -192,7 +191,6 @@ const similarityVal = document.getElementById('similarityVal');
 const appliedCountSpan = document.getElementById('appliedCount');
 const totalRulesSpan = document.getElementById('totalRules');
 const usedRulesSpan = document.getElementById('usedRules');
-const leftoverRulesSpan = document.getElementById('leftoverRules');
 const contentCharCount = document.getElementById('contentCharCount');
 const contentLineBadge = document.getElementById('contentLineBadge');
 const patternCharCount = document.getElementById('patternCharCount');
@@ -1232,7 +1230,7 @@ let finalReplLines = [...replLines];
 if (finalReplLines.length === 0) {
 const sepIdx = finalSearchLines.findIndex(line => line.trim().toLowerCase() === 'replace');
 if (sepIdx !== -1) {
-finalReplLines = finalSearchLines.slice(sepIdx + 1);
+finalReplLines = finalSearchLines.slice(sepIdx + 1).map(protectInlineReplacementWildcards);
 finalSearchLines = finalSearchLines.slice(0, sepIdx);
 }
 }
@@ -2250,7 +2248,8 @@ continue;
 			.filter(l => l.trim() !== '')
 			.map(l => stripInvisibleChars(l));
 		const replLines = blockLines.slice(sepIdx + 1)
-			.filter(l => l.trim() !== '');
+			.filter(l => l.trim() !== '')
+			.map(protectInlineReplacementWildcards);
 if (searchLines.length === 0 || replLines.length === 0) continue;
 
 blocks.push({ searchLines, replLines });
@@ -2302,7 +2301,7 @@ function parseMode1Pattern(rules, sep) {
 
 			patterns.push({
 				searchLines: searchLines.map(l => l.trim()),
-				replLines: replLines.slice(),
+				replLines: replLines.slice().map(protectInlineReplacementWildcards),
 				lineIndices: {
 					searchStart: fenceStart,
 					sepIdx: sepIdx,
@@ -2330,7 +2329,7 @@ function parseMode1Pattern(rules, sep) {
 			if (searchLines.length > 0 && replLines.length > 0) {
 				patterns.push({
 					searchLines,
-					replLines,
+					replLines: replLines.map(protectInlineReplacementWildcards),
 					lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
 				});
 			}
@@ -2454,6 +2453,45 @@ idx += WILDCARD_THREE_DOTS_PLACEHOLDER.length;
 return count;
 }
 
+// In replacement blocks, a wildcard placeholder adjacent to non-whitespace text
+// is treated as literal text (… or ...), not as a functional wildcard.
+// A standalone wildcard (surrounded by whitespace or line boundaries) remains functional.
+function protectInlineReplacementWildcards(line) {
+if (!ellipsisWildcardEnabled) return line;
+const s = String(line ?? '');
+let result = '';
+let i = 0;
+while (i < s.length) {
+let nextIdx = -1;
+let ph = null;
+const idxWEL = s.indexOf(WILDCARD_ELLIPSIS_PLACEHOLDER, i);
+const idxWTD = s.indexOf(WILDCARD_THREE_DOTS_PLACEHOLDER, i);
+if (idxWEL !== -1 && (idxWTD === -1 || idxWEL < idxWTD)) {
+nextIdx = idxWEL;
+ph = WILDCARD_ELLIPSIS_PLACEHOLDER;
+} else if (idxWTD !== -1) {
+nextIdx = idxWTD;
+ph = WILDCARD_THREE_DOTS_PLACEHOLDER;
+}
+if (nextIdx === -1) {
+result += s.slice(i);
+break;
+}
+result += s.slice(i, nextIdx);
+const before = nextIdx > 0 ? s[nextIdx - 1] : '';
+const afterIdx = nextIdx + ph.length;
+const after = s[afterIdx];
+const isStandalone = (before === '' || /\s/.test(before)) && (after === undefined || /\s/.test(after));
+if (isStandalone) {
+result += ph;
+} else {
+result += (ph === WILDCARD_ELLIPSIS_PLACEHOLDER ? LITERAL_ELLIPSIS_PLACEHOLDER : LITERAL_THREE_DOTS_PLACEHOLDER);
+}
+i = afterIdx;
+}
+return result;
+}
+
 function countEffectiveWildcards(replLines, captures) {
 let effective = 0;
 let capIdx = 0;
@@ -2533,7 +2571,6 @@ totalRules = blockCount;
 
 if (totalRulesSpan) totalRulesSpan.textContent = totalRules;
 if (usedRulesSpan) usedRulesSpan.textContent = lastUsedCount;
-if (leftoverRulesSpan) leftoverRulesSpan.textContent = Math.max(0, totalRules - lastUsedCount);
 }, 400);
 }
 
