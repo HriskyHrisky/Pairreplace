@@ -939,126 +939,126 @@ return { firstLine, lastLine };
 }
 
 function findCandidateStarts(contentLines, anchors, ngramIndex, n = RETRIEVAL_N, strict = false, requiredDistance = -1) {
-	if (!anchors || (!anchors.firstLine && !anchors.lastLine)) return [];
+if (!anchors || (!anchors.firstLine && !anchors.lastLine)) return [];
 
-	if (strict) {
-		const firstStripped = anchors.firstLine ? collapseWS(anchors.firstLine) : null;
-		const lastStripped = anchors.lastLine ? collapseWS(anchors.lastLine) : null;
+if (strict) {
+const firstStripped = anchors.firstLine ? collapseWS(anchors.firstLine) : null;
+const lastStripped = anchors.lastLine ? collapseWS(anchors.lastLine) : null;
 
-		const firstPositions = [];
-		const lastPositions = [];
-		for (let i = 0; i < contentLines.length; i++) {
-			const stripped = collapseWS(contentLines[i]);
-			if (firstStripped && stripped === firstStripped) firstPositions.push(i);
-			if (lastStripped && stripped === lastStripped) lastPositions.push(i);
-		}
+const firstPositions = [];
+const lastPositions = [];
+for (let i = 0; i < contentLines.length; i++) {
+const stripped = collapseWS(contentLines[i]);
+if (firstStripped && stripped === firstStripped) firstPositions.push(i);
+if (lastStripped && stripped === lastStripped) lastPositions.push(i);
+}
 
-		if (firstPositions.length === 0) return [];
-		if (lastStripped && firstStripped !== lastStripped && lastPositions.length === 0) return [];
+if (firstPositions.length === 0) return [];
+if (lastStripped && firstStripped !== lastStripped && lastPositions.length === 0) return [];
 
-		if (requiredDistance >= 0 && lastStripped) {
-			const validStarts = [];
-			for (const i of firstPositions) {
-				const j = i + requiredDistance;
-				if (j >= contentLines.length) continue;
-				if (collapseWS(contentLines[j]) !== lastStripped) continue;
-				validStarts.push(i);
-			}
-			return validStarts.sort((a, b) => a - b);
-		}
+if (requiredDistance >= 0 && lastStripped) {
+const validStarts = [];
+for (const i of firstPositions) {
+const j = i + requiredDistance;
+if (j >= contentLines.length) continue;
+if (collapseWS(contentLines[j]) !== lastStripped) continue;
+validStarts.push(i);
+}
+return validStarts.sort((a, b) => a - b);
+}
 
-		return firstPositions.sort((a, b) => a - b);
-	}
+return firstPositions.sort((a, b) => a - b);
+}
 
-	const tryAnchor = (anchorText) => {
-		if (!anchorText) return [];
-		const cleanAnchor = collapseWS(anchorText);
+const tryAnchor = (anchorText) => {
+if (!anchorText) return [];
+const cleanAnchor = collapseWS(anchorText);
 
-		const exactMatches = [];
-		for (let i = 0; i < contentLines.length; i++) {
-			if (collapseWS(contentLines[i]) === cleanAnchor) exactMatches.push(i);
-		}
-		if (exactMatches.length > 0) return exactMatches;
+const exactMatches = [];
+for (let i = 0; i < contentLines.length; i++) {
+if (collapseWS(contentLines[i]) === cleanAnchor) exactMatches.push(i);
+}
+if (exactMatches.length > 0) return exactMatches;
 
-		const anchorAcronym = buildAcronym(cleanAnchor);
-		if (anchorAcronym) {
-			const acronymMatches = [];
-			for (let i = 0; i < contentLines.length; i++) {
-				const lineAcronym = buildAcronym(collapseWS(contentLines[i]));
-				if (lineAcronym === anchorAcronym) acronymMatches.push(i);
-			}
-			if (acronymMatches.length > 0) return acronymMatches;
-		}
+const anchorAcronym = buildAcronym(cleanAnchor);
+if (anchorAcronym) {
+const acronymMatches = [];
+for (let i = 0; i < contentLines.length; i++) {
+const lineAcronym = buildAcronym(collapseWS(contentLines[i]));
+if (lineAcronym === anchorAcronym) acronymMatches.push(i);
+}
+if (acronymMatches.length > 0) return acronymMatches;
+}
 
-		const grams = extractNgrams(anchorText, n);
-		const ngramCandidates = new Set();
-		const MAX_NGRAM_CANDIDATES = 2000;
-		const MAX_POSTINGS_PER_GRAM = 500;
-		for (const gram of grams) {
-			const occurrences = ngramIndex.get(gram);
-			if (!occurrences) continue;
-			if (occurrences.length > MAX_POSTINGS_PER_GRAM) continue;
-			for (const lineIdx of occurrences) {
-				ngramCandidates.add(lineIdx);
-				if (ngramCandidates.size >= MAX_NGRAM_CANDIDATES) break;
-			}
-			if (ngramCandidates.size >= MAX_NGRAM_CANDIDATES) break;
-		}
-		if (ngramCandidates.size > 0) {
-			const anchorLen = normalizeForComparison(anchorText).length;
-			const anchorGramsCache = new Map();
-			const getAnchorGrams = (n) => {
-				if (anchorGramsCache.has(n)) return anchorGramsCache.get(n);
-				const g = extractNgrams(anchorText, n);
-				anchorGramsCache.set(n, g);
-				return g;
-			};
-			const verified = [];
-			for (const lineIdx of ngramCandidates) {
-				const lineText = contentLines[lineIdx];
-				const lineLen = normalizeForComparison(lineText).length;
-				const n = adaptiveVerifyN(anchorLen, lineLen);
-				const anchorGrams = getAnchorGrams(n);
-				const lineGrams = extractNgrams(lineText, n);
-				if (anchorGrams.size === 0 || lineGrams.size === 0) continue;
-				const denom = Math.min(anchorGrams.size, lineGrams.size);
-				const required = denom <= 5
-					? denom
-					: Math.max(3, Math.floor(denom * 0.30));
-				const [small, big] = anchorGrams.size <= lineGrams.size
-					? [anchorGrams, lineGrams]
-					: [lineGrams, anchorGrams];
-				let hits = 0;
-				for (const g of small) {
-					if (big.has(g)) hits++;
-				}
-				if (hits >= required) verified.push(lineIdx);
-			}
-			if (verified.length > 0) return verified.sort((a, b) => a - b);
-		}
+const grams = extractNgrams(anchorText, n);
+const ngramCandidates = new Set();
+const MAX_NGRAM_CANDIDATES = 2000;
+const MAX_POSTINGS_PER_GRAM = 500;
+for (const gram of grams) {
+const occurrences = ngramIndex.get(gram);
+if (!occurrences) continue;
+if (occurrences.length > MAX_POSTINGS_PER_GRAM) continue;
+for (const lineIdx of occurrences) {
+ngramCandidates.add(lineIdx);
+if (ngramCandidates.size >= MAX_NGRAM_CANDIDATES) break;
+}
+if (ngramCandidates.size >= MAX_NGRAM_CANDIDATES) break;
+}
+if (ngramCandidates.size > 0) {
+const anchorLen = normalizeForComparison(anchorText).length;
+const anchorGramsCache = new Map();
+const getAnchorGrams = (n) => {
+if (anchorGramsCache.has(n)) return anchorGramsCache.get(n);
+const g = extractNgrams(anchorText, n);
+anchorGramsCache.set(n, g);
+return g;
+};
+const verified = [];
+for (const lineIdx of ngramCandidates) {
+const lineText = contentLines[lineIdx];
+const lineLen = normalizeForComparison(lineText).length;
+const n = adaptiveVerifyN(anchorLen, lineLen);
+const anchorGrams = getAnchorGrams(n);
+const lineGrams = extractNgrams(lineText, n);
+if (anchorGrams.size === 0 || lineGrams.size === 0) continue;
+const denom = Math.min(anchorGrams.size, lineGrams.size);
+const required = denom <= 5
+? denom
+: Math.max(3, Math.floor(denom * 0.30));
+const [small, big] = anchorGrams.size <= lineGrams.size
+? [anchorGrams, lineGrams]
+: [lineGrams, anchorGrams];
+let hits = 0;
+for (const g of small) {
+if (big.has(g)) hits++;
+}
+if (hits >= required) verified.push(lineIdx);
+}
+if (verified.length > 0) return verified.sort((a, b) => a - b);
+}
 
-		const anchorWords = cleanAnchor.split(/\s+/).map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toLowerCase()).filter(Boolean);
-		if (anchorWords.length > 0) {
-			const targetWord = anchorWords[0];
-			const wordCandidates = [];
-			for (let i = 0; i < contentLines.length; i++) {
-				if (contentLines[i].toLowerCase().includes(targetWord)) wordCandidates.push(i);
-			}
-			if (wordCandidates.length > 0) return wordCandidates;
-		}
+const anchorWords = cleanAnchor.split(/\s+/).map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toLowerCase()).filter(Boolean);
+if (anchorWords.length > 0) {
+const targetWord = anchorWords[0];
+const wordCandidates = [];
+for (let i = 0; i < contentLines.length; i++) {
+if (contentLines[i].toLowerCase().includes(targetWord)) wordCandidates.push(i);
+}
+if (wordCandidates.length > 0) return wordCandidates;
+}
 
-		return [];
-	};
+return [];
+};
 
-	let candidates = tryAnchor(anchors.firstLine);
-	if (candidates.length === 0 && anchors.lastLine && anchors.lastLine !== anchors.firstLine) {
-		candidates = tryAnchor(anchors.lastLine);
-	}
-	return candidates.length > 0 ? candidates.sort((a, b) => a - b) : [];
+let candidates = tryAnchor(anchors.firstLine);
+if (candidates.length === 0 && anchors.lastLine && anchors.lastLine !== anchors.firstLine) {
+candidates = tryAnchor(anchors.lastLine);
+}
+return candidates.length > 0 ? candidates.sort((a, b) => a - b) : [];
 }
 
 // -------------------- matchPatternLineBased (with fixed cursor advancement) (unchanged) --------------------
-function matchPatternLineBased(contentLines, start, items, threshold, greedy, startCol = 0) {
+function matchPatternLineBased(contentLines, start, items, threshold, greedy, startCol = 0, mode = 'fuzzy') {
 let cursorLine = start;
 let cursorCol = startCol;
 let captured = []; // { itemIndex, captures }
@@ -1067,34 +1067,31 @@ let sims = [];
 for (let i = 0; i < items.length; i++) {
 const item = items[i];
 
-		if (item.type === 'literal_block') {
-			const lines = item.text.split('\n');
-			if (cursorLine + lines.length > contentLines.length) {
-				return { success: false };
-			}
+if (item.type === 'literal_block') {
+const lines = item.text.split('\n');
+if (cursorLine + lines.length > contentLines.length) {
+return { success: false };
+}
 
-			let sourceBlock = '';
-			for (let j = 0; j < lines.length; j++) {
-				const startCol = (j === 0) ? cursorCol : 0;
-				sourceBlock += (j > 0 ? '\n' : '') + contentLines[cursorLine + j].slice(startCol);
-			}
-			const patternBlock = lines.join('\n');
+let sourceBlock = '';
+for (let j = 0; j < lines.length; j++) {
+const startCol = (j === 0) ? cursorCol : 0;
+sourceBlock += (j > 0 ? '\n' : '') + contentLines[cursorLine + j].slice(startCol);
+}
+const patternBlock = lines.join('\n');
 
-			const blockSim = compareWithTolerance(
-				sourceBlock,
-				patternBlock,
-				false,
-				0
-			);
+const blockSim = (mode === 'exact')
+? (collapseWS(sourceBlock) === collapseWS(patternBlock) ? 100 : 0)
+: compareWithTolerance(sourceBlock, patternBlock, false, 0);
 
-			if (blockSim < threshold) {
-				return { success: false };
-			}
+if (blockSim < threshold) {
+return { success: false };
+}
 
-			sims.push(blockSim);
-			cursorLine += lines.length;
-			cursorCol = 0;
-		}
+sims.push(blockSim);
+cursorLine += lines.length;
+cursorCol = 0;
+}
 
 else if (item.type === 'inline_pattern') {
 if (cursorLine >= contentLines.length) return { success: false };
@@ -1272,19 +1269,36 @@ return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalN
 let startMin = 0;
 let startMax = Math.max(0, work.length - 1);
 
+const pairStrategy = (pairInfo && pairInfo.strategy) ? pairInfo.strategy : 'fuzzy';
+const pairWindows = (pairInfo && Array.isArray(pairInfo.windows)) ? pairInfo.windows : null;
+const matchMode = (pairStrategy === 'exact') ? 'exact' : 'fuzzy';
+
+let scanStarts = null;
+if (pairWindows) {
+scanStarts = pairWindows.map(w => w[0]);
+} else if (pairStrategy === 'exact') {
+scanStarts = null;
+} else {
+return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalNewLines: 0, appliedCount: 0 };
+}
+
+if (scanStarts) {
+startMin = Math.min(...scanStarts);
+startMax = Math.max(...scanStarts);
+} else if (pairStrategy === 'exact') {
 const bookend = getBookendAnchors(searchItems);
 if (bookend) {
-const ngramN = getNgramN(finalSearchLines);
-const ngramIndex = getNgramIndex(work, ngramN);
-const strict = finalSearchLines.length > 1;
-const hasWildcards = searchItems.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
-const requiredDistance = (strict && !hasWildcards) ? Math.max(0, finalSearchLines.length - 1) : -1;
-const candidateStarts = findCandidateStarts(work, bookend, ngramIndex, ngramN, strict, requiredDistance);
-if (candidateStarts.length > 0) {
-startMin = searchItems[0]?.type === 'wildcard' ? 0 : Math.min(...candidateStarts);
-startMax = Math.max(...candidateStarts);
-} else if (strict) {
+const firstStripped = collapseWS(bookend.firstLine || '');
+const hits = [];
+for (let i = 0; i < work.length; i++) {
+if (collapseWS(work[i]) === firstStripped) hits.push(i);
+}
+if (hits.length > 0) {
+startMin = searchItems[0]?.type === 'wildcard' ? 0 : Math.min(...hits);
+startMax = Math.max(...hits);
+} else {
 return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalNewLines: 0, appliedCount: 0 };
+}
 }
 }
 if (searchItems[0]?.type === 'wildcard') startMin = 0;
@@ -1292,9 +1306,12 @@ if (searchItems[0]?.type === 'wildcard') startMin = 0;
 const allCandidates = [];
 let lastOrganizeYieldTime = performance.now();
 let organizeAborted = false;
-for (let i = startMin; i <= startMax; i++) {
+
+if (scanStarts) {
+for (const i of scanStarts) {
 if (signal?.aborted) { organizeAborted = true; break; }
-const res = matchPatternLineBased(work, i, searchItems, threshold, greedy);
+if (i < 0 || i > work.length - 1) continue;
+const res = matchPatternLineBased(work, i, searchItems, threshold, greedy, 0, matchMode);
 if (res.success && res.match) {
 allCandidates.push({
 start: i,
@@ -1304,11 +1321,31 @@ minSim: res.match.minSim,
 captured: res.match.captured
 });
 }
-		if (performance.now() - lastOrganizeYieldTime > 30) {
-			if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total}`, 'info', true);
-			await new Promise(r => setTimeout(r, 0));
-			lastOrganizeYieldTime = performance.now();
-		}
+if (performance.now() - lastOrganizeYieldTime > 30) {
+if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total} · ${pairStrategy}`, 'info', true);
+await new Promise(r => setTimeout(r, 0));
+lastOrganizeYieldTime = performance.now();
+}
+}
+} else {
+for (let i = startMin; i <= startMax; i++) {
+if (signal?.aborted) { organizeAborted = true; break; }
+const res = matchPatternLineBased(work, i, searchItems, threshold, greedy, 0, matchMode);
+if (res.success && res.match) {
+allCandidates.push({
+start: i,
+end: res.match.end,
+avgSim: res.match.avgSim,
+minSim: res.match.minSim,
+captured: res.match.captured
+});
+}
+if (performance.now() - lastOrganizeYieldTime > 30) {
+if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total} · ${pairStrategy}`, 'info', true);
+await new Promise(r => setTimeout(r, 0));
+lastOrganizeYieldTime = performance.now();
+}
+}
 }
 
 if (allCandidates.length === 0) {
@@ -1591,31 +1628,31 @@ aborted: organizeAborted || !!signal?.aborted
 async function ReplaceMode1(content, rules, threshold, greedy, applyMultipleMatches, originalContent, originalRawRules, signal, showStatus, updateStats) {
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
 
-	const sep = separatorInput ? separatorInput.value.trim() : '';
-	const allParsedPatterns = parseMode1Pattern(rules, sep);
+const sep = separatorInput ? separatorInput.value.trim() : '';
+const allParsedPatterns = parseMode1Pattern(rules, sep);
 
-	// Strip identical search==replacement pairs (they carry no meaningful info)
-	const identicalRanges = [];
-	const patterns = [];
-	for (const pat of allParsedPatterns) {
-		const searchNorm = normalizeForComparison(pat.searchLines.join('\n'));
-		const replNorm = normalizeForComparison((pat.rawReplLines || []).map(l => l.trim()).join('\n'));
-		if (searchNorm === replNorm && searchNorm.length > 0) {
-			const { searchStart, sepIdx, replEnd } = pat.lineIndices;
-			identicalRanges.push({ start: searchStart, end: replEnd });
-		} else {
-			patterns.push(pat);
-		}
-	}
+// Strip identical search==replacement pairs (they carry no meaningful info)
+const identicalRanges = [];
+const patterns = [];
+for (const pat of allParsedPatterns) {
+const searchNorm = normalizeForComparison(pat.searchLines.join('\n'));
+const replNorm = normalizeForComparison((pat.rawReplLines || []).map(l => l.trim()).join('\n'));
+if (searchNorm === replNorm && searchNorm.length > 0) {
+const { searchStart, sepIdx, replEnd } = pat.lineIndices;
+identicalRanges.push({ start: searchStart, end: replEnd });
+} else {
+patterns.push(pat);
+}
+}
 
-	if (!patterns || patterns.length === 0) {
-		const skipMsg = identicalRanges.length > 0
-			? `🗑️ ${identicalRanges.length} identical pair(s) deleted · No valid patterns remain.`
-			: 'No valid patterns found. Check fences and separator.';
-		if (showStatus) showStatus(skipMsg, 'warning');
-		if (updateStats) updateStats();
-		return { newContent: content, totalApplied: 0, reports: [], totalRules: 0, usedCount: 0, patterns: null, usedPatterns: new Set(), patternsMatched: 0, skippedRanges: identicalRanges, skippedCount: identicalRanges.length };
-	}
+if (!patterns || patterns.length === 0) {
+const skipMsg = identicalRanges.length > 0
+? `🗑️ ${identicalRanges.length} identical pair(s) deleted · No valid patterns remain.`
+: 'No valid patterns found. Check fences and separator.';
+if (showStatus) showStatus(skipMsg, 'warning');
+if (updateStats) updateStats();
+return { newContent: content, totalApplied: 0, reports: [], totalRules: 0, usedCount: 0, patterns: null, usedPatterns: new Set(), patternsMatched: 0, skippedRanges: identicalRanges, skippedCount: identicalRanges.length };
+}
 
 const usedPatterns = new Set();
 let work = norm(content).split('\n');
@@ -1637,11 +1674,8 @@ m.pos += diff;
 }
 }
 
-const pendingQueue = patterns.map((_, i) => i);
 const runHistory = [];
 const patternOutcome = new Map();
-const changedRegions = [];
-let runCount = 0;
 
 function recordSuccess(pi, match, replacementLineCount) {
 const o = patternOutcome.get(pi) || { success: false, applications: 0, bestSimilarity: 0, totalOriginalLines: 0, totalReplacementLines: 0, failureReasons: [] };
@@ -1660,35 +1694,30 @@ if (!o.success && o.failureReasons.length < 3) o.failureReasons.push(reason);
 patternOutcome.set(pi, o);
 }
 
-function recordChange(start, oldLen, newLen) {
-changedRegions.push({ start, oldLen, newLen });
+const CODE_FENCE_RE = /^\s*```/;
+const isFencePattern = (pat) => pat.searchLines.some(l => CODE_FENCE_RE.test(l));
+const countSharedWords = (a, b) => {
+const wordsA = new Set(normalizeForComparison(a).split(/\s+/).filter(Boolean));
+const wordsB = new Set(normalizeForComparison(b).split(/\s+/).filter(Boolean));
+let n = 0;
+for (const w of wordsA) if (wordsB.has(w)) n++;
+return n;
+};
+const unmatched = () => patterns.map((_, i) => i).filter(pi => !usedPatterns.has(pi));
+const unmatchedNow = () => unmatched().filter(pi => !isFencePattern(patterns[pi]));
+const unmatchedDeferred = () => unmatched().filter(pi => isFencePattern(patterns[pi]));
+
+async function tryPattern(pi, strategy, windows) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const pat = patterns[pi];
+const searchLines = pat.searchLines;
+const replLines = pat.replLines;
+
+if (!searchLines || searchLines.length === 0) {
+recordFailure(pi, 'Search block is empty', 0);
+return false;
 }
 
-function getRetryWindow(patternSpan) {
-if (changedRegions.length === 0) return null;
-let lo = work.length, hi = 0;
-for (const c of changedRegions) {
-const end = c.start + Math.max(c.oldLen, c.newLen);
-lo = Math.min(lo, Math.max(0, c.start - patternSpan));
-hi = Math.max(hi, Math.min(work.length - 1, end + patternSpan));
-}
-return { lo, hi };
-}
-
-	while (pendingQueue.length > 0) {
-		runCount++;
-		const currentQueue = pendingQueue.splice(0);
-		changedRegions.length = 0;
-		for (const pi of currentQueue) {
-		if (signal?.aborted) throw new Error('Operation cancelled');
-		const pat = patterns[pi];
-		const searchLines = pat.searchLines;
-		const replLines = pat.replLines;
-
-		if (!searchLines || searchLines.length === 0) {
-			recordFailure(pi, 'Search block is empty', 0);
-			continue;
-		}
 const organizeToggleChecked = organizeModeToggle ? organizeModeToggle.checked : false;
 const forceOrganizeMode = shouldForceOrganizeMode(searchLines, replLines, organizeToggleChecked);
 const isOrganizeMode = organizeToggleChecked || forceOrganizeMode;
@@ -1704,8 +1733,11 @@ modeStatusBadge.textContent = `📏 Normal (${wildcardCount} wildcards)`;
 }
 }
 
-			if (isOrganizeMode) {
-const result = await OrganizeMode(work, searchLines, replLines, threshold, greedy, applyMultipleMatches, signal, showStatus, { current: pi + 1, total: patterns.length });
+const stageThreshold = (strategy === 'exact') ? 100 : threshold;
+const stageMode = (strategy === 'exact') ? 'exact' : 'fuzzy';
+
+if (isOrganizeMode) {
+const result = await OrganizeMode(work, searchLines, replLines, stageThreshold, greedy, applyMultipleMatches, signal, showStatus, { current: pi + 1, total: patterns.length, strategy, windows });
 if (result.applied) {
 const oldLen = work.length;
 work = result.newWork;
@@ -1713,120 +1745,86 @@ const newLen = work.length;
 globalOffset += (newLen - oldLen);
 totalApplied += result.appliedCount;
 usedPatterns.add(pi);
-recordChange(0, oldLen, newLen);
 recordSuccess(pi, { avgSim: result.avgSim, start: 0, end: result.totalOriginalLines }, result.totalNewLines);
 markIndexDirty();
-} else {
-recordFailure(pi, result.failureReason || 'No matching block found', 0);
+return true;
 }
+recordFailure(pi, result.failureReason || `No match (${strategy})`, 0);
 if (result.aborted) {
 partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
 throw new Error('Operation cancelled');
 }
-} else {
-let { items } = buildPatternItems(searchLines, lineWildcardEnabled);
-let bookend = getBookendAnchors(items);
+return false;
+}
 
-let minPatternLines = items.reduce((acc, it) => {
+let { items } = buildPatternItems(searchLines, lineWildcardEnabled);
+const bookend = getBookendAnchors(items);
+
+const minPatternLines = items.reduce((acc, it) => {
 if (it.type === 'literal_block') return acc + it.text.split('\n').length;
 if (it.type === 'inline_pattern') return acc + 1;
 return acc;
 }, 0);
+
+let scanStarts = null;
+if (strategy === 'exact') {
+scanStarts = null;
+} else {
+if (!bookend) { recordFailure(pi, 'Gate: no bookend anchors', 0); return false; }
+if (!windows || windows.length === 0) { recordFailure(pi, 'Gate: no exact bookend pair', 0); return false; }
+scanStarts = windows.map(w => w[0]);
+}
 
 let startMin = 0;
 let startMax = Math.max(0, work.length - (minPatternLines === 0 ? 1 : minPatternLines));
-const ngramN = getNgramN(searchLines);
-		if (bookend) {
-			const ngramIndex = getNgramIndex(work, ngramN);
-			const strict = searchLines.length > 1;
-			const hasWildcards = items.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
-			const requiredDistance = (strict && !hasWildcards) ? Math.max(0, searchLines.length - 1) : -1;
-			const candidateStarts = findCandidateStarts(work, bookend, ngramIndex, ngramN, strict, requiredDistance);
-			const validStarts = candidateStarts.filter(i => i >= 0 && i <= startMax);
-			if (validStarts.length > 0) {
-				startMin = items[0]?.type === 'wildcard' ? 0 : Math.min(...validStarts);
-				startMax = Math.max(...validStarts);
-			} else {
-				startMin = 1;
-				startMax = 0;
-			}
-		}
+if (scanStarts) {
+startMin = Math.min(...scanStarts);
+startMax = Math.min(Math.max(...scanStarts), work.length - 1);
+}
 if (items[0]?.type === 'wildcard') startMin = 0;
-
-// Retry windowing: on retries, only scan regions touched by previous changes
-if (runCount > 1 && !usedPatterns.has(pi)) {
-const retryWin = getRetryWindow(searchLines.length);
-if (!retryWin) { recordFailure(pi, 'No changes to re-determine', 0); continue; }
-startMin = Math.max(startMin, retryWin.lo);
-startMax = Math.min(startMax, retryWin.hi);
-if (startMin > startMax) { recordFailure(pi, 'No changes in retry window', 0); continue; }
-}
-
-// Clamp scan range: never attempt positions that cannot possibly fit minPatternLines
-if (minPatternLines > 0) {
-startMax = Math.min(startMax, work.length - minPatternLines);
-}
+if (minPatternLines > 0) startMax = Math.min(startMax, work.length - minPatternLines);
 startMin = Math.max(0, Math.min(startMin, Math.max(0, work.length - 1)));
 
-let allCandidates = [];
-let attemptedPositions = 0;
+const allCandidates = [];
 let lastYieldTime = performance.now();
+
+if (scanStarts) {
+for (const i of scanStarts) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+if (i < 0 || i > startMax) continue;
+const res = matchPatternLineBased(work, i, items, stageThreshold, greedy, 0, stageMode);
+if (res.success) allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
+}
+} else {
 for (let i = startMin; i <= startMax; i++) {
 if (signal?.aborted) throw new Error('Operation cancelled');
-attemptedPositions++;
-const res = matchPatternLineBased(work, i, items, threshold, greedy);
-if (res.success) {
-allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
+const res = matchPatternLineBased(work, i, items, stageThreshold, greedy, 0, stageMode);
+if (res.success) allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
+if (performance.now() - lastYieldTime > 30) {
+if (showStatus) showStatus(`⏳ ${strategy} · pair ${pi + 1}/${patterns.length}`, 'info', true);
+await new Promise(r => setTimeout(r, 0));
+lastYieldTime = performance.now();
 }
-		if (performance.now() - lastYieldTime > 30) {
-			if (showStatus) showStatus(`⏳ Pair ${pi + 1}/${patterns.length}`, 'info', true);
-			await new Promise(r => setTimeout(r, 0));
-			lastYieldTime = performance.now();
-		}
+}
 }
 
-let hasWildcard = false;
+if (strategy === 'word' && isFencePattern(pat)) {
+const searchText = pat.searchLines.join('\n');
+for (let ci = allCandidates.length - 1; ci >= 0; ci--) {
+const c = allCandidates[ci];
+const blockText = work.slice(c.start, c.end).join('\n');
+if (countSharedWords(searchText, blockText) < 10) {
+allCandidates.splice(ci, 1);
+}
+}
+}
 
 if (allCandidates.length === 0) {
-if (ellipsisWildcardEnabled && (searchLines.some(l => l.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) || l.includes(WILDCARD_THREE_DOTS_PLACEHOLDER)))) {
-const originalEllipsis = ellipsisWildcardEnabled;
-ellipsisWildcardEnabled = false;
-const literalSearchLines = searchLines.map(l => l.split(WILDCARD_ELLIPSIS_PLACEHOLDER).join('…').split(WILDCARD_THREE_DOTS_PLACEHOLDER).join('...'));
-const literalReplLines = replLines.map(l => l.split(WILDCARD_ELLIPSIS_PLACEHOLDER).join('…').split(WILDCARD_THREE_DOTS_PLACEHOLDER).join('...'));
-({ items } = buildPatternItems(literalSearchLines, lineWildcardEnabled));
-const literalMinPatternLines = items.reduce((acc, it) => {
-if (it.type === 'literal_block') return acc + it.text.split('\n').length;
-if (it.type === 'inline_pattern') return acc + 1;
-return acc;
-}, 0);
-startMin = 0;
-startMax = Math.max(0, work.length - (literalMinPatternLines > 0 ? literalMinPatternLines : 1));
-allCandidates = [];
-let lastFallbackYieldTime = performance.now();
-for (let i = startMin; i <= startMax; i++) {
-if (signal?.aborted) throw new Error('Operation cancelled');
-const res = matchPatternLineBased(work, i, items, threshold, greedy);
-if (res.success) {
-allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
-}
-						if (performance.now() - lastFallbackYieldTime > 30) {
-							if (showStatus) showStatus(`⏳ Pair ${pi + 1}/${patterns.length} · fallback`, 'info', true);
-							await new Promise(r => setTimeout(r, 0));
-							lastFallbackYieldTime = performance.now();
-						}
-}
-ellipsisWildcardEnabled = originalEllipsis;
-replLines.length = 0;
-replLines.push(...literalReplLines);
-}
-if (allCandidates.length === 0) {
-recordFailure(pi, bookend ? (attemptedPositions === 0 ? 'No candidate start position' : `No full match at any of ${attemptedPositions} position(s)`) : 'No match', 0);
-continue;
-}
+recordFailure(pi, `No match (${strategy})`, 0);
+return false;
 }
 
-hasWildcard = items.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
-
+const hasWildcard = items.some(it => it.type === 'wildcard' || it.type === 'inline_pattern');
 let matchesToProcess = [];
 
 if (!hasWildcard) {
@@ -1837,7 +1835,6 @@ const lenB = b.end - b.start;
 if (lenB !== lenA) return lenB - lenA;
 return a.start - b.start;
 });
-
 const maxScore = allCandidates[0].avgSim;
 const topSimCandidates = allCandidates.filter(m => Math.abs(m.avgSim - maxScore) < 1e-9);
 const maxLength = Math.max(...topSimCandidates.map(c => c.end - c.start));
@@ -1850,9 +1847,7 @@ const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end
 if (!overlaps) selected.push(cand);
 }
 matchesToProcess = selected;
-if (matchesToProcess.length > 1000) {
-matchesToProcess = matchesToProcess.slice(0, 1000);
-}
+if (matchesToProcess.length > 1000) matchesToProcess = matchesToProcess.slice(0, 1000);
 matchesToProcess.sort((a, b) => b.start - a.start);
 } else {
 matchesToProcess = [topLengthCandidates[0]];
@@ -1879,9 +1874,7 @@ const overlaps = selected.some(m => !(cand.end <= m.start || cand.start >= m.end
 if (!overlaps) selected.push(cand);
 }
 matchesToProcess = selected;
-if (matchesToProcess.length > 1000) {
-matchesToProcess = matchesToProcess.slice(0, 1000);
-}
+if (matchesToProcess.length > 1000) matchesToProcess = matchesToProcess.slice(0, 1000);
 matchesToProcess.sort((a, b) => b.start - a.start);
 } else {
 matchesToProcess = [bestMatches[0]];
@@ -1898,7 +1891,7 @@ markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end 
 
 if (matchesToProcess.length === 0 && allCandidates.length > 0) {
 recordFailure(pi, 'All matches overlap with previous applications', allCandidates[0]?.avgSim || 0);
-continue;
+return false;
 }
 
 for (const match of matchesToProcess) {
@@ -1921,39 +1914,93 @@ modeStatusBadge.textContent = `📏 Normal (${effectiveWildcards} wildcards)`;
 }
 
 if (replacement.length > 3 && collapseWS(originalBlock) === collapseWS(newBlock)) {
-// identical and replacement has more than 3 lines: skip applying, just remove rule
 totalApplied++;
 usedPatterns.add(pi);
 recordSuccess(pi, match, replacement.length);
 const o = patternOutcome.get(pi); if (o) o.identicalSkipped = true;
 } else {
 applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
-recordChange(match.start, match.end - match.start, replacement.length);
 totalApplied++;
 usedPatterns.add(pi);
 recordSuccess(pi, match, replacement.length);
 }
-				markIndexDirty();
-			}
-		}
-		await new Promise(r => setTimeout(r, 0));
-		}
-		runHistory.push({
-			run: runCount,
-			pendingBefore: currentQueue.length,
-			newlyApplied: currentQueue.filter(pi => usedPatterns.has(pi)).length,
-			pendingAfter: pendingQueue.length
-		});
-		let runProgress = false;
-		for (const pi of currentQueue) {
-			if (usedPatterns.has(pi)) runProgress = true;
-			else pendingQueue.push(pi);
-		}
-		if (!runProgress) break;
-	}
+markIndexDirty();
+}
+return true;
+}
 
-	if (shouldShowMarkers && markers.length) {
-		const uniqueMarkers = [];
+// ── Stage 1: exact — repeat until no further matches succeed
+let exactPass = 0;
+let exactChanged = true;
+while (exactChanged) {
+exactChanged = false;
+exactPass++;
+for (const pi of unmatchedNow()) {
+if (await tryPattern(pi, 'exact', null)) exactChanged = true;
+}
+if (signal?.aborted) throw new Error('Operation cancelled');
+}
+runHistory.push({ stage: 'exact', passes: exactPass });
+
+// ── Stage 2: bookend gate — compute windows per unmatched pattern
+const windowsByPattern = new Map();
+for (const pi of unmatchedNow()) {
+const { items } = buildPatternItems(patterns[pi].searchLines, lineWildcardEnabled);
+const anchors = getBookendAnchors(items);
+const wins = findBookendWindows(work, anchors);
+if (wins.length > 0) windowsByPattern.set(pi, wins);
+else recordFailure(pi, 'Gate: no exact bookend pair', 0);
+}
+
+// ── Stages 3 & 4: word → ngram (stage 4 was word, stage 3 was ngram — swapped)
+for (const strategy of ['word', 'ngram']) {
+let appliedThisStage = 0;
+for (const pi of unmatchedNow()) {
+const wins = windowsByPattern.get(pi);
+if (!wins || wins.length === 0) continue;
+if (await tryPattern(pi, strategy, wins)) appliedThisStage++;
+}
+runHistory.push({ stage: strategy, applied: appliedThisStage });
+await new Promise(r => setTimeout(r, 0));
+}
+
+// ── Deferred pass: code-fence patterns are handled last, untouched by earlier stages
+if (unmatchedDeferred().length > 0) {
+const deferredWins = new Map();
+for (const pi of unmatchedDeferred()) {
+const { items } = buildPatternItems(patterns[pi].searchLines, lineWildcardEnabled);
+const anchors = getBookendAnchors(items);
+const wins = findBookendWindows(work, anchors);
+if (wins.length > 0) deferredWins.set(pi, wins);
+else recordFailure(pi, 'Gate: no exact bookend pair (deferred)', 0);
+}
+let deferredExactPass = 0;
+let deferredChanged = true;
+while (deferredChanged) {
+deferredChanged = false;
+deferredExactPass++;
+for (const pi of unmatchedDeferred()) {
+if (await tryPattern(pi, 'exact', null)) deferredChanged = true;
+}
+if (signal?.aborted) throw new Error('Operation cancelled');
+}
+runHistory.push({ stage: 'exact-deferred', passes: deferredExactPass });
+for (const strategy of ['word', 'ngram']) {
+let appliedThisStage = 0;
+for (const pi of unmatchedDeferred()) {
+const wins = deferredWins.get(pi);
+if (!wins || wins.length === 0) continue;
+if (await tryPattern(pi, strategy, wins)) appliedThisStage++;
+}
+runHistory.push({ stage: strategy + '-deferred', applied: appliedThisStage });
+await new Promise(r => setTimeout(r, 0));
+}
+}
+
+const runCount = runHistory.length;
+
+if (shouldShowMarkers && markers.length) {
+const uniqueMarkers = [];
 const seen = new Set();
 for (const m of markers.sort((a,b) => b.pos - a.pos)) {
 if (!seen.has(m.pos)) {
@@ -1968,46 +2015,46 @@ work.splice(m.pos, 0, MARKER_LINE);
 }
 }
 
-	if (signal?.aborted && pendingQueue.length > 0) {
-		partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
-		throw new Error('Operation cancelled');
-	}
+if (signal?.aborted && pendingQueue.length > 0) {
+partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
+throw new Error('Operation cancelled');
+}
 
 const newContent = cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n')));
-	// OR-merge: exactly one row per rule; success overrides earlier failures
-	const mergedReports = patterns.map((_, pi) => {
-		const o = patternOutcome.get(pi);
-		if (!o) {
-			return { bestSimilarity: 0, success: false, failureReason: 'Not attempted' };
-		}
-		if (o.success) {
-			return {
-				bestSimilarity: o.bestSimilarity,
-				success: true,
-				originalLineCount: o.totalOriginalLines,
-				replacementLineCount: o.totalReplacementLines,
-				failureReason: null,
-				identicalSkipped: !!o.identicalSkipped,
-				applications: o.applications
-			};
-		}
-		return { bestSimilarity: o.bestSimilarity, success: false, failureReason: o.failureReasons[0] || 'No match', applications: 0 };
-	});
+// OR-merge: exactly one row per rule; success overrides earlier failures
+const mergedReports = patterns.map((_, pi) => {
+const o = patternOutcome.get(pi);
+if (!o) {
+return { bestSimilarity: 0, success: false, failureReason: 'Not attempted' };
+}
+if (o.success) {
+return {
+bestSimilarity: o.bestSimilarity,
+success: true,
+originalLineCount: o.totalOriginalLines,
+replacementLineCount: o.totalReplacementLines,
+failureReason: null,
+identicalSkipped: !!o.identicalSkipped,
+applications: o.applications
+};
+}
+return { bestSimilarity: o.bestSimilarity, success: false, failureReason: o.failureReasons[0] || 'No match', applications: 0 };
+});
 
-	return {
-		newContent,
-		totalApplied,
-		reports: mergedReports,
-		totalRules: patterns.length,
-		usedCount: usedPatterns.size,
-		patterns,
-		usedPatterns,
-		patternsMatched: usedPatterns.size,
-		runsUsed: runCount,
-		runHistory,
-		skippedRanges: identicalRanges,
-		skippedCount: identicalRanges.length
-	};
+return {
+newContent,
+totalApplied,
+reports: mergedReports,
+totalRules: patterns.length,
+usedCount: usedPatterns.size,
+patterns,
+usedPatterns,
+patternsMatched: usedPatterns.size,
+runsUsed: runCount,
+runHistory,
+skippedRanges: identicalRanges,
+skippedCount: identicalRanges.length
+};
 }
 
 // -------------------- ReplaceMode2 (with marker adjustment) (unchanged) --------------------
@@ -2039,13 +2086,11 @@ m.pos += diff;
 }
 }
 
-	const matchLinesCount = parseInt((mode2Threshold && mode2Threshold.value) || 2, 10);
-	const minLiteralLines = Math.max(1, matchLinesCount);
+const matchLinesCount = parseInt((mode2Threshold && mode2Threshold.value) || 2, 10);
+const minLiteralLines = Math.max(1, matchLinesCount);
 
-const pendingBlocks = blocks.map((_, i) => i);
 const runHistory = [];
 const blockOutcome = new Map();
-let runCount = 0;
 let mode2LastYieldTime = performance.now();
 
 function recordBlockFailure(bi, reason, bestSim) {
@@ -2064,167 +2109,230 @@ o.replacementLineCount += addedCount;
 blockOutcome.set(bi, o);
 }
 
-	while (pendingBlocks.length > 0) {
-		runCount++;
-		const currentBatch = pendingBlocks.splice(0);
-		for (const bi of currentBatch) {
-			if (signal?.aborted) throw new Error('Operation cancelled');
-			const block = blocks[bi];
-			const searchLines = block.searchLines;
-			const replLines = block.replLines;
+const CODE_FENCE_RE = /^\s*```/;
+const isFenceBlock = (blk) => blk.searchLines.some(l => CODE_FENCE_RE.test(l));
+const countSharedWords = (a, b) => {
+const wordsA = new Set(normalizeForComparison(a).split(/\s+/).filter(Boolean));
+const wordsB = new Set(normalizeForComparison(b).split(/\s+/).filter(Boolean));
+let n = 0;
+for (const w of wordsA) if (wordsB.has(w)) n++;
+return n;
+};
+const unmatchedBlocks = () => blocks.map((_, i) => i).filter(bi => !usedBlocks.has(bi));
+const unmatchedBlocksNow = () => unmatchedBlocks().filter(bi => !isFenceBlock(blocks[bi]));
+const unmatchedBlocksDeferred = () => unmatchedBlocks().filter(bi => isFenceBlock(blocks[bi]));
 
-			if (searchLines.length === 0) {
-				recordBlockFailure(bi, 'Search lines missing', 0);
-				continue;
-			}
+async function tryBlock(bi, strategy, windows) {
+if (signal?.aborted) throw new Error('Operation cancelled');
+const block = blocks[bi];
+const searchLines = block.searchLines;
+const replLines = block.replLines;
 
-			const ngramN = getNgramN(searchLines);
-			const ngramIndex = getNgramIndex(work, ngramN);
+if (searchLines.length === 0) {
+recordBlockFailure(bi, 'Search lines missing', 0);
+return false;
+}
 
-			const firstSearchLine = searchLines[0] || '';
-			const firstTrimmed = firstSearchLine.trim();
-			const isFirstLineLiteral =
-				firstTrimmed !== '' &&
-				firstTrimmed !== '...' &&
-				firstTrimmed !== '…' &&
-				firstTrimmed !== WILDCARD_ELLIPSIS_PLACEHOLDER &&
-				firstTrimmed !== WILDCARD_THREE_DOTS_PLACEHOLDER;
+const firstSearchLine = searchLines[0] || '';
+const firstTrimmed = firstSearchLine.trim();
+const isFirstLineLiteral =
+firstTrimmed !== '' &&
+firstTrimmed !== '...' &&
+firstTrimmed !== '…' &&
+firstTrimmed !== WILDCARD_ELLIPSIS_PLACEHOLDER &&
+firstTrimmed !== WILDCARD_THREE_DOTS_PLACEHOLDER;
 
-			let scanPositions;
-			if (isFirstLineLiteral) {
-				const strict = searchLines.length > 1;
-				const hasWildcards = searchLines.some(l => {
-					const t = String(l || '').trim();
-					return t.includes('…') || t.includes('...') ||
-						t.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) ||
-						t.includes(WILDCARD_THREE_DOTS_PLACEHOLDER);
-				});
-				const requiredDistance = (strict && !hasWildcards) ? Math.max(0, searchLines.length - 1) : -1;
-				const anchorStarts = findCandidateStarts(
-					work,
-					{ firstLine: firstSearchLine, lastLine: searchLines[searchLines.length - 1] || null },
-					ngramIndex,
-					ngramN,
-					strict,
-					requiredDistance
-				);
-				scanPositions = anchorStarts.filter(i => i >= 0 && i < work.length);
-				if (scanPositions.length === 0) {
-					if (strict) {
-						recordBlockFailure(bi, 'No strict anchor match', 0);
-						continue;
-					}
-					scanPositions = null;
-				}
-			} else {
-				scanPositions = null;
-			}
+const stageThreshold = (strategy === 'exact') ? 100 : threshold;
 
-			const candidates = [];
-			const totalIter = scanPositions ? scanPositions.length : work.length;
+let scanPositions;
+if (strategy === 'exact') {
+scanPositions = null;
+} else {
+if (!windows || windows.length === 0) {
+recordBlockFailure(bi, 'Gate: no exact bookend pair', 0);
+return false;
+}
+scanPositions = windows.map(w => w[0]);
+}
+
+const candidates = [];
+const totalIter = scanPositions ? scanPositions.length : work.length;
 for (let sIdx = 0; sIdx < totalIter; sIdx++) {
 const i = scanPositions ? scanPositions[sIdx] : sIdx;
 if (performance.now() - mode2LastYieldTime > 30) {
-if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length}`, 'info', true);
+if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length} · ${strategy}`, 'info', true);
 await new Promise(r => setTimeout(r, 0));
 mode2LastYieldTime = performance.now();
 }
 let literalMatched = 0;
-				let simSum = 0;
-				let curIdx = i;
-				let lastMatchedPos = i - 1;
-				let patternIdx = 0;
-				for (let j = 0; j < searchLines.length && curIdx < work.length; j++) {
-					const searchLine = searchLines[j];
-					const trimmed = (searchLine || '').trim();
-					const isWildcardLine =
-						trimmed === '…' ||
-						trimmed === '...' ||
-						trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER ||
-						trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER;
-					if (isWildcardLine) {
-						lastMatchedPos = curIdx;
-						curIdx++;
-						patternIdx = j + 1;
-						continue;
-					}
-const sim = compareWithTolerance(work[curIdx], searchLine, false, 0);
-if (sim < threshold) break;
+let simSum = 0;
+let curIdx = i;
+let lastMatchedPos = i - 1;
+let patternIdx = 0;
+for (let j = 0; j < searchLines.length && curIdx < work.length; j++) {
+const searchLine = searchLines[j];
+const trimmed = (searchLine || '').trim();
+const isWildcardLine =
+trimmed === '…' ||
+trimmed === '...' ||
+trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER ||
+trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER;
+if (isWildcardLine) {
+lastMatchedPos = curIdx;
+curIdx++;
+patternIdx = j + 1;
+continue;
+}
+const sim = (strategy === 'exact')
+? (collapseWS(work[curIdx]) === collapseWS(searchLine) ? 100 : 0)
+: compareWithTolerance(work[curIdx], searchLine, false, 0);
+if (sim < stageThreshold) break;
 simSum += sim;
 literalMatched++;
 lastMatchedPos = curIdx;
 curIdx++;
 patternIdx = j + 1;
-				}
-				if (literalMatched < minLiteralLines) continue;
-				const avgSim = simSum / literalMatched;
-				if (avgSim < threshold) continue;
-				candidates.push({
-					startIdx: i,
-					insertPos: lastMatchedPos + 1,
-					matchedCount: literalMatched,
-					avgSim,
-					remainingPatternLines: searchLines.slice(patternIdx)
-				});
-			}
+}
+if (literalMatched < minLiteralLines) continue;
+const avgSim = simSum / literalMatched;
+if (avgSim < stageThreshold) continue;
+candidates.push({
+startIdx: i,
+insertPos: lastMatchedPos + 1,
+matchedCount: literalMatched,
+avgSim,
+remainingPatternLines: searchLines.slice(patternIdx)
+});
+}
 
-			if (candidates.length === 0) {
-				recordBlockFailure(bi, isFirstLineLiteral ? 'No matching signature lines found' : 'No match', 0);
-				continue;
-			}
+if (strategy === 'word' && isFenceBlock(block)) {
+const searchText = block.searchLines.join('\n');
+for (let ci = candidates.length - 1; ci >= 0; ci--) {
+const c = candidates[ci];
+const blockText = work.slice(c.startIdx, c.insertPos).join('\n');
+if (countSharedWords(searchText, blockText) < 10) {
+candidates.splice(ci, 1);
+}
+}
+}
 
-			candidates.sort((a, b) => {
-				if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
-				if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount;
-				return a.startIdx - b.startIdx;
-			});
+if (candidates.length === 0) {
+recordBlockFailure(bi, isFirstLineLiteral ? `No matching signature lines found (${strategy})` : `No match (${strategy})`, 0);
+return false;
+}
 
-			let toApply;
-			if (applyMultipleMatches) {
-				const selected = [];
-				for (const c of candidates) {
-					const overlaps = selected.some(s => !(c.insertPos <= s.startIdx || c.startIdx >= s.insertPos));
-					if (!overlaps) selected.push(c);
-				}
-				toApply = selected;
-			} else {
-				toApply = [candidates[0]];
-				if (shouldShowMarkers) {
-					const margin = 5;
-					for (let k = 1; k < candidates.length; k++) {
-						const c = candidates[k];
-						if (Math.abs(c.avgSim - candidates[0].avgSim) <= margin) {
-							markers.push({ pos: c.startIdx + globalOffset, kind: 'ambiguity' });
-						}
-					}
-				}
-			}
+candidates.sort((a, b) => {
+if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount;
+return a.startIdx - b.startIdx;
+});
 
-			toApply.sort((a, b) => b.insertPos - a.insertPos);
-			for (const m of toApply) {
-				const remaining = (m.remainingPatternLines || []).map(l => protectInlineReplacementWildcards(l));
-				const removeCount = Math.min(remaining.length, Math.max(0, work.length - m.insertPos));
-				applyReplacementAndAdjustMarkers(m.insertPos, m.insertPos + removeCount, remaining);
-				totalApplied++;
-				usedBlocks.add(bi);
-				recordBlockSuccess(bi, m, removeCount, remaining.length);
-				markIndexDirty();
-			}
-			await new Promise(r => setTimeout(r, 0));
-		}
-		runHistory.push({
-			run: runCount,
-			pendingBefore: currentBatch.length,
-			newlyApplied: currentBatch.filter(bi => usedBlocks.has(bi)).length,
-			pendingAfter: pendingBlocks.length
-		});
-		let runProgress = false;
-		for (const bi of currentBatch) {
-			if (usedBlocks.has(bi)) runProgress = true;
-			else pendingBlocks.push(bi);
-		}
-		if (!runProgress) break;
-	}
+let toApply;
+if (applyMultipleMatches) {
+const selected = [];
+for (const c of candidates) {
+const overlaps = selected.some(s => !(c.insertPos <= s.startIdx || c.startIdx >= s.insertPos));
+if (!overlaps) selected.push(c);
+}
+toApply = selected;
+} else {
+toApply = [candidates[0]];
+if (shouldShowMarkers) {
+const margin = 5;
+for (let k = 1; k < candidates.length; k++) {
+const c = candidates[k];
+if (Math.abs(c.avgSim - candidates[0].avgSim) <= margin) {
+markers.push({ pos: c.startIdx + globalOffset, kind: 'ambiguity' });
+}
+}
+}
+}
+
+toApply.sort((a, b) => b.insertPos - a.insertPos);
+for (const m of toApply) {
+const remaining = (m.remainingPatternLines || []).map(l => protectInlineReplacementWildcards(l));
+const removeCount = Math.min(remaining.length, Math.max(0, work.length - m.insertPos));
+applyReplacementAndAdjustMarkers(m.insertPos, m.insertPos + removeCount, remaining);
+totalApplied++;
+usedBlocks.add(bi);
+recordBlockSuccess(bi, m, removeCount, remaining.length);
+markIndexDirty();
+}
+await new Promise(r => setTimeout(r, 0));
+return true;
+}
+
+// ── Stage 1: exact — repeat until no further matches
+let exactPass = 0;
+let exactChanged = true;
+while (exactChanged) {
+exactChanged = false;
+exactPass++;
+for (const bi of unmatchedBlocksNow()) {
+if (await tryBlock(bi, 'exact', null)) exactChanged = true;
+}
+if (signal?.aborted) throw new Error('Operation cancelled');
+}
+runHistory.push({ stage: 'exact', passes: exactPass });
+
+// ── Stage 2: bookend gate — exact first/last anchor pair
+const windowsByBlock = new Map();
+for (const bi of unmatchedBlocksNow()) {
+const searchLines = blocks[bi].searchLines;
+const first = searchLines[0] || '';
+const last = searchLines[searchLines.length - 1] || null;
+const wins = findBookendWindows(work, { firstLine: first, lastLine: last });
+if (wins.length > 0) windowsByBlock.set(bi, wins);
+else recordBlockFailure(bi, 'Gate: no exact bookend pair', 0);
+}
+
+// ── Stages 3 & 4: word → ngram (stage 4 was word, stage 3 was ngram — swapped)
+for (const strategy of ['word', 'ngram']) {
+let appliedThisStage = 0;
+for (const bi of unmatchedBlocksNow()) {
+const wins = windowsByBlock.get(bi);
+if (!wins || wins.length === 0) continue;
+if (await tryBlock(bi, strategy, wins)) appliedThisStage++;
+}
+runHistory.push({ stage: strategy, applied: appliedThisStage });
+await new Promise(r => setTimeout(r, 0));
+}
+
+// ── Deferred pass: code-fence blocks are handled last, untouched by earlier stages
+if (unmatchedBlocksDeferred().length > 0) {
+const deferredWins = new Map();
+for (const bi of unmatchedBlocksDeferred()) {
+const searchLines = blocks[bi].searchLines;
+const first = searchLines[0] || '';
+const last = searchLines[searchLines.length - 1] || null;
+const wins = findBookendWindows(work, { firstLine: first, lastLine: last });
+if (wins.length > 0) deferredWins.set(bi, wins);
+else recordBlockFailure(bi, 'Gate: no exact bookend pair (deferred)', 0);
+}
+let deferredExactPass = 0;
+let deferredChanged = true;
+while (deferredChanged) {
+deferredChanged = false;
+deferredExactPass++;
+for (const bi of unmatchedBlocksDeferred()) {
+if (await tryBlock(bi, 'exact', null)) deferredChanged = true;
+}
+if (signal?.aborted) throw new Error('Operation cancelled');
+}
+runHistory.push({ stage: 'exact-deferred', passes: deferredExactPass });
+for (const strategy of ['word', 'ngram']) {
+let appliedThisStage = 0;
+for (const bi of unmatchedBlocksDeferred()) {
+const wins = deferredWins.get(bi);
+if (!wins || wins.length === 0) continue;
+if (await tryBlock(bi, strategy, wins)) appliedThisStage++;
+}
+runHistory.push({ stage: strategy + '-deferred', applied: appliedThisStage });
+await new Promise(r => setTimeout(r, 0));
+}
+}
+
+const runCount = runHistory.length;
 
 if (shouldShowMarkers && markers.length) {
 const uniqueMarkers = [];
@@ -2296,99 +2404,85 @@ return blocks;
 
 // -------------------- Helper functions --------------------
 function parseMode1Pattern(rules, sep) {
-	const lines = norm(rules).split('\n');
-	const patterns = [];
-	let i = 0;
+const lines = norm(rules).split('\n');
+const patterns = [];
+let i = 0;
 
-	while (i < lines.length) {
-		const trimmed = lines[i].trim();
-		if (trimmed.startsWith('```')) {
-			const fenceStart = i;
-			const searchLines = [];
+while (i < lines.length) {
+const trimmed = lines[i].trim();
+if (trimmed.startsWith('```')) {
+const fenceStart = i;
+const searchLines = [];
 
-			i++;
-			while (i < lines.length && !lines[i].trim().startsWith('```')) {
-				searchLines.push(stripInvisibleChars(lines[i]));
-				i++;
-			}
-			if (i >= lines.length) break;
+i++;
+while (i < lines.length && !lines[i].trim().startsWith('```')) {
+searchLines.push(stripInvisibleChars(lines[i]));
+i++;
+}
+if (i >= lines.length) break;
 
-			i++; // move past closing search fence
+i++; // move past closing search fence
 
-			let sepIdx = lines.findIndex(
-				(line, idx) => idx >= i && line.toLowerCase().includes(sep.toLowerCase())
-			);
+const sepIdx = lines.findIndex(
+(line, idx) => idx >= i && line.toLowerCase().includes(sep.toLowerCase())
+);
+if (sepIdx === -1) break;
 
-			let replOpen = -1;
-			if (sepIdx !== -1) {
-				replOpen = sepIdx + 1;
-				while (replOpen < lines.length && lines[replOpen].trim() === '') {
-					replOpen++;
-				}
-				if (replOpen >= lines.length || !lines[replOpen].trim().startsWith('```')) {
-					break;
-				}
-			} else {
-				// No separator line found: allow two adjacent fenced blocks
-				// (search fence, then blank(s), then replacement fence).
-				let next = i;
-				while (next < lines.length && lines[next].trim() === '') {
-					next++;
-				}
-				if (next < lines.length && lines[next].trim().startsWith('```')) {
-					replOpen = next;
-				} else {
-					break;
-				}
-			}
+let replOpen = sepIdx + 1;
+while (replOpen < lines.length && lines[replOpen].trim() === '') {
+replOpen++;
+}
+if (replOpen >= lines.length || !lines[replOpen].trim().startsWith('```')) {
+break;
+}
 
-			const replLines = [];
-			let replEnd = replOpen + 1;
-			while (replEnd < lines.length && !lines[replEnd].trim().startsWith('```')) {
-				replLines.push(lines[replEnd]);
-				replEnd++;
-			}
-			if (replEnd >= lines.length) break;
+const replLines = [];
+let replEnd = replOpen + 1;
+while (replEnd < lines.length && !lines[replEnd].trim().startsWith('```')) {
+replLines.push(lines[replEnd]);
+replEnd++;
+}
+if (replEnd >= lines.length) break;
 
-			patterns.push({
-				searchLines: searchLines.map(l => l.trim()),
-				replLines: replLines.slice().map(protectInlineReplacementWildcards),
-				rawReplLines: replLines.slice(),
-				lineIndices: {
-					searchStart: fenceStart,
-					sepIdx: sepIdx,
-					replEnd: replEnd
-				}
-			});
+patterns.push({
+searchLines: searchLines.map(l => l.trim()),
+replLines: replLines.slice().map(protectInlineReplacementWildcards),
+rawReplLines: replLines.slice(),
+lineIndices: {
+searchStart: fenceStart,
+sepIdx: sepIdx,
+replEnd: replEnd
+}
+});
 
-			i = replEnd + 1;
-		} else {
-			i++;
-		}
-	}
+i = replEnd + 1;
+} else {
+i++;
+}
+}
 
-	if (patterns.length === 0 && !lines.some(l => l.trim().startsWith('```'))) {
-		const sepIdx = lines.findIndex(line =>
-			line.toLowerCase().includes(sep.toLowerCase())
-		);
-		if (sepIdx !== -1) {
-			const searchLines = lines.slice(0, sepIdx)
-				.map(l => stripInvisibleChars(l).trim())
-				.filter(l => l.length > 0);
-			const replLines = lines.slice(sepIdx + 1)
-				.map(l => l.trim())
-				.filter(l => l.length > 0);
-			if (searchLines.length > 0 && replLines.length > 0) {
-				patterns.push({
-					searchLines,
-					replLines: replLines.map(protectInlineReplacementWildcards),
-					lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
-				});
-			}
-		}
-	}
+if (patterns.length === 0 && !lines.some(l => l.trim().startsWith('```'))) {
+const sepIdx = lines.findIndex(line =>
+line.toLowerCase().includes(sep.toLowerCase())
+);
+if (sepIdx !== -1) {
+const searchLines = lines.slice(0, sepIdx)
+.map(l => stripInvisibleChars(l).trim())
+.filter(l => l.length > 0);
+const replLines = lines.slice(sepIdx + 1)
+.map(l => l.trim())
+.filter(l => l.length > 0);
+if (searchLines.length > 0 && replLines.length > 0) {
+patterns.push({
+searchLines,
+replLines: replLines.map(protectInlineReplacementWildcards),
+lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
+});
+}
+}
+}
 
-	return patterns;
+return patterns;
 }
 
 function parseFenceInfos(lines) {
@@ -2608,11 +2702,10 @@ function analyseMode1(raw, sep) {
 const patterns = parseMode1Pattern(raw, sep) || [];
 const lines = norm(raw).split('\n');
 const { allPairs } = parseFenceInfos(lines);
+// Count all fence pairs (not only those with level === 0)
 const totalPairs = allPairs.length;
-const total = Math.floor(totalPairs / 2);
-const valid = patterns.length;
-const potential = Math.max(0, total - valid);
-return { valid, potential };
+const potential = Math.floor(totalPairs / 2);
+return { valid: patterns.length, potential };
 }
 
 function clearCaches() {
@@ -2862,59 +2955,59 @@ statusTimeout = null;
 }
 
 function rebuildMode1RulesComplete(originalRawRules, patterns, usedPatterns, isLocked, skippedRanges) {
-	if (isLocked) return;
+if (isLocked) return;
 
-	const allLines = norm(originalRawRules).split('\n');
-	const usedIndices = new Set();
-	const skippedIndices = new Set();
-	const allPatternIndices = new Set();
+const allLines = norm(originalRawRules).split('\n');
+const usedIndices = new Set();
+const skippedIndices = new Set();
+const allPatternIndices = new Set();
 
-	if (Array.isArray(skippedRanges)) {
-		for (const r of skippedRanges) {
-			for (let i = r.start; i <= r.end; i++) {
-				skippedIndices.add(i);
-			}
-		}
-	}
+if (Array.isArray(skippedRanges)) {
+for (const r of skippedRanges) {
+for (let i = r.start; i <= r.end; i++) {
+skippedIndices.add(i);
+}
+}
+}
 
-	patterns.forEach((pat, idx) => {
-		let rangeStart = pat.lineIndices.searchStart;
-		let rangeEnd = pat.lineIndices.replEnd;
+patterns.forEach((pat, idx) => {
+let rangeStart = pat.lineIndices.searchStart;
+let rangeEnd = pat.lineIndices.replEnd;
 
-		if (pat.lineIndices.sepIdx >= 0) {
-			rangeStart = Math.min(rangeStart, pat.lineIndices.sepIdx);
-			rangeEnd = Math.max(rangeEnd, pat.lineIndices.sepIdx);
-		}
+if (pat.lineIndices.sepIdx >= 0) {
+rangeStart = Math.min(rangeStart, pat.lineIndices.sepIdx);
+rangeEnd = Math.max(rangeEnd, pat.lineIndices.sepIdx);
+}
 
-		for (let i = rangeStart; i <= rangeEnd; i++) {
-			allPatternIndices.add(i);
-		}
-		if (usedPatterns.has(idx)) {
-			for (let i = rangeStart; i <= rangeEnd; i++) {
-				usedIndices.add(i);
-			}
-		}
-	});
+for (let i = rangeStart; i <= rangeEnd; i++) {
+allPatternIndices.add(i);
+}
+if (usedPatterns.has(idx)) {
+for (let i = rangeStart; i <= rangeEnd; i++) {
+usedIndices.add(i);
+}
+}
+});
 
-	const remainingPatternLines = [];
-	const unrelatedLines = [];
+const remainingPatternLines = [];
+const unrelatedLines = [];
 
-	allLines.forEach((line, idx) => {
-		if (usedIndices.has(idx)) return;
-		if (skippedIndices.has(idx)) return;
-		if (allPatternIndices.has(idx)) {
-			remainingPatternLines.push(line);
-		} else {
-			unrelatedLines.push(line);
-		}
-	});
+allLines.forEach((line, idx) => {
+if (usedIndices.has(idx)) return;
+if (skippedIndices.has(idx)) return;
+if (allPatternIndices.has(idx)) {
+remainingPatternLines.push(line);
+} else {
+unrelatedLines.push(line);
+}
+});
 
-	let newValue = remainingPatternLines.join('\n');
-	if (unrelatedLines.length > 0) {
-		if (newValue) newValue += '\n\n';
-		newValue += unrelatedLines.join('\n');
-	}
-	patternArea.value = newValue;
+let newValue = remainingPatternLines.join('\n');
+if (unrelatedLines.length > 0) {
+if (newValue) newValue += '\n\n';
+newValue += unrelatedLines.join('\n');
+}
+patternArea.value = newValue;
 }
 
 // -------------------- Main Replace function --------------------
