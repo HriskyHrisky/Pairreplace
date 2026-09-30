@@ -2277,7 +2277,7 @@ if (i >= lines.length) break;
 i++; // move past closing search fence
 
 const sepIdx = lines.findIndex(
-(line, idx) => idx >= i && line.trim().toLowerCase() === sep.toLowerCase()
+(line, idx) => idx >= i && line.trim().toLowerCase().includes(sep.toLowerCase())
 );
 if (sepIdx === -1) break;
 
@@ -2438,24 +2438,61 @@ effective++;
 return effective;
 }
 
-const PARKING_STORAGE_KEY = 'text-replacement-parking';
-let parkingSaveTimer = null;
+const STATE_STORAGE_KEY = 'text-replacement-state-v1';
+let stateSaveTimer = null;
+
+function collectState() {
+return {
+content: contentArea ? contentArea.value : '',
+rules: patternArea ? patternArea.value : '',
+parking: parkingArea ? parkingArea.value : '',
+similarity: similarityRange ? similarityRange.value : '80',
+ellipsisWildcard: !!(ellipsisWildcard && ellipsisWildcard.checked),
+greedyEllipsis: !!(greedyEllipsis && greedyEllipsis.checked),
+lineWildcard: !!(lineWildcard && lineWildcard.checked),
+lockedPattern: !!(lockedPattern && lockedPattern.checked),
+allowAmbiguity: !!(allowAmbiguityToggle && allowAmbiguityToggle.checked),
+organizeMode: !!(organizeModeToggle && organizeModeToggle.checked),
+allOrNone: !!(allOrNoneToggle && allOrNoneToggle.checked),
+interpretEscapes: !!(interpretEscapesToggle && interpretEscapesToggle.checked),
+showMarkers: !!(showMarkersToggle && showMarkersToggle.checked),
+autoCopy: !!(autoCopyToggle && autoCopyToggle.checked),
+mode2Threshold: mode2Threshold ? mode2Threshold.value : '2',
+separator: separatorInput ? separatorInput.value : 'replace',
+mode: currentMode
+};
+}
 
 function scheduleSaveState() {
-if (parkingSaveTimer) clearTimeout(parkingSaveTimer);
-parkingSaveTimer = setTimeout(() => {
-if (parkingArea) {
-try { localStorage.setItem(PARKING_STORAGE_KEY, parkingArea.value); } catch (e) {}
-}
-parkingSaveTimer = null;
+if (stateSaveTimer) clearTimeout(stateSaveTimer);
+stateSaveTimer = setTimeout(() => {
+try { localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(collectState())); } catch (e) {}
+stateSaveTimer = null;
 }, 300);
 }
 
 function loadParkingState() {
-if (!parkingArea) return;
 try {
-const saved = localStorage.getItem(PARKING_STORAGE_KEY);
-if (saved !== null) parkingArea.value = saved;
+const saved = localStorage.getItem(STATE_STORAGE_KEY);
+if (!saved) return;
+const s = JSON.parse(saved);
+if (s.content !== undefined && contentArea) contentArea.value = s.content;
+if (s.rules !== undefined && patternArea) patternArea.value = s.rules;
+if (s.parking !== undefined && parkingArea) parkingArea.value = s.parking;
+if (s.similarity !== undefined && similarityRange) similarityRange.value = s.similarity;
+if (s.ellipsisWildcard !== undefined && ellipsisWildcard) ellipsisWildcard.checked = !!s.ellipsisWildcard;
+if (s.greedyEllipsis !== undefined && greedyEllipsis) greedyEllipsis.checked = !!s.greedyEllipsis;
+if (s.lineWildcard !== undefined && lineWildcard) lineWildcard.checked = !!s.lineWildcard;
+if (s.lockedPattern !== undefined && lockedPattern) lockedPattern.checked = !!s.lockedPattern;
+if (s.allowAmbiguity !== undefined && allowAmbiguityToggle) allowAmbiguityToggle.checked = !!s.allowAmbiguity;
+if (s.organizeMode !== undefined && organizeModeToggle) organizeModeToggle.checked = !!s.organizeMode;
+if (s.allOrNone !== undefined && allOrNoneToggle) allOrNoneToggle.checked = !!s.allOrNone;
+if (s.interpretEscapes !== undefined && interpretEscapesToggle) interpretEscapesToggle.checked = !!s.interpretEscapes;
+if (s.showMarkers !== undefined && showMarkersToggle) showMarkersToggle.checked = !!s.showMarkers;
+if (s.autoCopy !== undefined && autoCopyToggle) autoCopyToggle.checked = !!s.autoCopy;
+if (s.mode2Threshold !== undefined && mode2Threshold) mode2Threshold.value = s.mode2Threshold;
+if (s.separator !== undefined && separatorInput) separatorInput.value = s.separator;
+if (s.mode !== undefined) currentMode = s.mode;
 } catch (e) {}
 }
 
@@ -2928,6 +2965,7 @@ updateStats();
 contentArea.value = newContent;
 lastAppliedCount = totalApplied;
 commitSnapshot();
+scheduleSaveState();
 
 if (autoCopyToggle && autoCopyToggle.checked && totalApplied > 0 && newContent && navigator.clipboard) {
 navigator.clipboard.writeText(newContent).catch(() => {});
@@ -2989,6 +3027,7 @@ statusTimeout = setTimeout(() => statusMsgEl.classList.add('hidden'), 6000);
 }
 
 function init() {
+loadParkingState();
 if (ellipsisWildcard) {
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
 }
@@ -3001,10 +3040,24 @@ showMarkers = showMarkersToggle.checked;
 showMarkers = false;
 }
 
-loadParkingState();
-
 const modeTabs = document.querySelectorAll('.mode-tab');
 setupKeyboardNav(modeTabs);
+
+if (currentMode === 2) {
+const tab2 = document.querySelector('.mode-tab[data-mode="2"]');
+if (tab2) {
+modeTabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+tab2.classList.add('active');
+tab2.setAttribute('aria-selected', 'true');
+if (mode1Controls) mode1Controls.classList.add('hidden');
+if (mode2Controls) mode2Controls.classList.remove('hidden');
+if (organizeModeToggle && organizeModeToggle.closest) {
+organizeModeToggle.closest('.toggle-wrap').style.display = 'none';
+}
+if (replaceBtn) replaceBtn.textContent = 'Append All';
+setModeHint('Mode 2: Blocks separated by blank lines; search and replacement split by a blank line.');
+}
+}
 
 modeTabs.forEach(tab => {
 tab.addEventListener('click', () => {
@@ -3121,6 +3174,7 @@ redoStack.length = 0;
 lastSnapshot = getSnapshot();
 updateUndoRedoButtons();
 updateStats();
+scheduleSaveState();
 }
 
 if (resetBtn) {
@@ -3156,6 +3210,7 @@ markIndexDirty();
 resetOpStats();
 commitSnapshot();
 updateStats();
+scheduleSaveState();
 });
 }
 
@@ -3170,11 +3225,9 @@ window.addEventListener('beforeunload', () => {
 clearTimeout(statsTimer);
 clearTimeout(statusTimeout);
 clearTimeout(inputCommitTimer);
-if (parkingSaveTimer) {
-clearTimeout(parkingSaveTimer);
-if (parkingArea) {
-try { localStorage.setItem(PARKING_STORAGE_KEY, parkingArea.value); } catch (e) {}
-}
+if (stateSaveTimer) {
+clearTimeout(stateSaveTimer);
+try { localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(collectState())); } catch (e) {}
 }
 if (abortController) {
 abortController.abort();
@@ -3183,6 +3236,14 @@ abortController = null;
 });
 
 bindLiveUpdate();
+const appContainer = document.querySelector('.app');
+if (appContainer) {
+appContainer.addEventListener('input', scheduleSaveState);
+appContainer.addEventListener('change', scheduleSaveState);
+appContainer.addEventListener('click', (e) => {
+if (e.target.closest && e.target.closest('.mode-tab')) scheduleSaveState();
+});
+}
 updateWildcardDependencies();
 setModeHint('Mode 1: Search block must match; replacement lines are applied in order.');
 if (replaceBtn) replaceBtn.textContent = 'Replace All';
