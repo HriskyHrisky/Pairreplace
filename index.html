@@ -310,6 +310,17 @@ return stripInvisibleChars(String(s ?? '')).replace(/^[ \t]+|[ \t]+$/gm, '');
 
 function norm(s) { return String(s ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'); }
 
+function safeMinMax(arr) {
+if (!arr || arr.length === 0) return [0, -1];
+let lo = arr[0], hi = arr[0];
+for (let i = 1; i < arr.length; i++) {
+const v = arr[i];
+if (v < lo) lo = v;
+if (v > hi) hi = v;
+}
+return [lo, hi];
+}
+
 function interpretEscapes(str) {
 return str.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
 }
@@ -935,7 +946,73 @@ const firstLine = literalLines[0];
 const lastLine = literalLines[literalLines.length - 1];
 
 if (!firstLine || !lastLine) return null;
-return { firstLine, lastLine };
+return {
+firstLine,
+lastLine,
+firstLines: literalLines,
+lastLines: literalLines.slice().reverse()
+};
+}
+
+function findBookendWindows(contentLines, anchors) {
+if (!anchors) return [];
+const frontAll = (anchors.firstLines && anchors.firstLines.length > 0)
+? anchors.firstLines
+: (anchors.firstLine ? [anchors.firstLine] : []);
+const backAll = (anchors.lastLines && anchors.lastLines.length > 0)
+? anchors.lastLines
+: (anchors.lastLine ? [anchors.lastLine] : []);
+const maxFront = frontAll.length;
+const maxBack = backAll.length;
+if (maxFront === 0 || maxBack === 0) return [];
+const maxDepth = Math.min(maxFront, maxBack);
+
+let lastWindows = [];
+for (let depth = 1; depth <= maxDepth; depth++) {
+const frontDepth = Math.min(depth, maxFront);
+const backDepth = Math.min(depth, maxBack);
+const frontSeq = frontAll.slice(0, frontDepth).map(collapseWS);
+const backSeq = backAll.slice(0, backDepth).map(collapseWS);
+if (frontSeq.some(s => !s) || backSeq.some(s => !s)) return lastWindows;
+
+const firstHits = [];
+for (let i = 0; i + frontDepth <= contentLines.length; i++) {
+let ok = true;
+for (let j = 0; j < frontDepth; j++) {
+if (collapseWS(contentLines[i + j]) !== frontSeq[j]) { ok = false; break; }
+}
+if (ok) firstHits.push(i);
+}
+const lastHits = [];
+for (let i = 0; i + backDepth <= contentLines.length; i++) {
+let ok = true;
+for (let j = 0; j < backDepth; j++) {
+if (collapseWS(contentLines[i + j]) !== backSeq[j]) { ok = false; break; }
+}
+if (ok) lastHits.push(i);
+}
+if (firstHits.length === 0 || lastHits.length === 0) return lastWindows;
+
+const same = frontSeq.length === backSeq.length && frontSeq.every((s, k) => s === backSeq[k]);
+const windows = [];
+if (same) {
+for (const i of firstHits) windows.push([i, i + frontDepth - 1]);
+} else {
+let lastIdx = 0;
+for (const i of firstHits) {
+const threshold = i + frontDepth;
+while (lastIdx < lastHits.length && lastHits[lastIdx] < threshold) lastIdx++;
+if (lastIdx < lastHits.length) {
+windows.push([i, lastHits[lastIdx] + backDepth - 1]);
+}
+}
+}
+if (windows.length === 0) return lastWindows;
+lastWindows = windows;
+if (windows.length === 1) return windows;
+if (depth === maxDepth) return windows;
+}
+return lastWindows;
 }
 
 function findCandidateStarts(contentLines, anchors, ngramIndex, n = RETRIEVAL_N, strict = false, requiredDistance = -1) {
@@ -1283,8 +1360,9 @@ return { applied: false, newWork: work, avgSim: 0, totalOriginalLines: 0, totalN
 }
 
 if (scanStarts) {
-startMin = Math.min(...scanStarts);
-startMax = Math.max(...scanStarts);
+const [sLo, sHi] = safeMinMax(scanStarts);
+startMin = sLo;
+startMax = sHi;
 } else if (pairStrategy === 'exact') {
 const bookend = getBookendAnchors(searchItems);
 if (bookend) {
@@ -1634,15 +1712,23 @@ const allParsedPatterns = parseMode1Pattern(rules, sep);
 // Strip identical search==replacement pairs (they carry no meaningful info)
 const identicalRanges = [];
 const patterns = [];
+const seenPairKeys = new Set();
 for (const pat of allParsedPatterns) {
 const searchNorm = normalizeForComparison(pat.searchLines.join('\n'));
 const replNorm = normalizeForComparison((pat.rawReplLines || []).map(l => l.trim()).join('\n'));
 if (searchNorm === replNorm && searchNorm.length > 0) {
 const { searchStart, sepIdx, replEnd } = pat.lineIndices;
 identicalRanges.push({ start: searchStart, end: replEnd });
-} else {
-patterns.push(pat);
+continue;
 }
+const pairKey = searchNorm + '\u0000' + replNorm;
+if (seenPairKeys.has(pairKey)) {
+const { searchStart, sepIdx, replEnd } = pat.lineIndices;
+identicalRanges.push({ start: searchStart, end: replEnd });
+continue;
+}
+seenPairKeys.add(pairKey);
+patterns.push(pat);
 }
 
 if (!patterns || patterns.length === 0) {
@@ -1677,6 +1763,25 @@ m.pos += diff;
 const runHistory = [];
 const patternOutcome = new Map();
 
+const capturePartialSnapshot = () => {
+partialReplaceSnapshot = {
+newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))),
+totalApplied,
+usedPatterns: new Set(usedPatterns),
+usedCount: usedPatterns.size,
+patterns,
+skippedRanges: identicalRanges,
+skippedCount: identicalRanges.length
+};
+};
+
+const abortIfCancelled = () => {
+if (signal?.aborted) {
+capturePartialSnapshot();
+throw new Error('Operation cancelled');
+}
+};
+
 function recordSuccess(pi, match, replacementLineCount) {
 const o = patternOutcome.get(pi) || { success: false, applications: 0, bestSimilarity: 0, totalOriginalLines: 0, totalReplacementLines: 0, failureReasons: [] };
 o.success = true;
@@ -1708,7 +1813,7 @@ const unmatchedNow = () => unmatched().filter(pi => !isFencePattern(patterns[pi]
 const unmatchedDeferred = () => unmatched().filter(pi => isFencePattern(patterns[pi]));
 
 async function tryPattern(pi, strategy, windows) {
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 const pat = patterns[pi];
 const searchLines = pat.searchLines;
 const replLines = pat.replLines;
@@ -1749,11 +1854,21 @@ recordSuccess(pi, { avgSim: result.avgSim, start: 0, end: result.totalOriginalLi
 markIndexDirty();
 return true;
 }
-recordFailure(pi, result.failureReason || `No match (${strategy})`, 0);
 if (result.aborted) {
-partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
+const oldLen = work.length;
+work = result.newWork;
+const newLen = work.length;
+globalOffset += (newLen - oldLen);
+if (result.appliedCount > 0) {
+totalApplied += result.appliedCount;
+usedPatterns.add(pi);
+recordSuccess(pi, { avgSim: result.avgSim, start: 0, end: result.totalOriginalLines }, result.totalNewLines);
+markIndexDirty();
+}
+capturePartialSnapshot();
 throw new Error('Operation cancelled');
 }
+recordFailure(pi, result.failureReason || `No match (${strategy})`, 0);
 return false;
 }
 
@@ -1778,8 +1893,9 @@ scanStarts = windows.map(w => w[0]);
 let startMin = 0;
 let startMax = Math.max(0, work.length - (minPatternLines === 0 ? 1 : minPatternLines));
 if (scanStarts) {
-startMin = Math.min(...scanStarts);
-startMax = Math.min(Math.max(...scanStarts), work.length - 1);
+const [sLo, sHi] = safeMinMax(scanStarts);
+startMin = sLo;
+startMax = Math.min(sHi, work.length - 1);
 }
 if (items[0]?.type === 'wildcard') startMin = 0;
 if (minPatternLines > 0) startMax = Math.min(startMax, work.length - minPatternLines);
@@ -1790,14 +1906,14 @@ let lastYieldTime = performance.now();
 
 if (scanStarts) {
 for (const i of scanStarts) {
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 if (i < 0 || i > startMax) continue;
 const res = matchPatternLineBased(work, i, items, stageThreshold, greedy, 0, stageMode);
 if (res.success) allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
 }
 } else {
 for (let i = startMin; i <= startMax; i++) {
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 const res = matchPatternLineBased(work, i, items, stageThreshold, greedy, 0, stageMode);
 if (res.success) allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
 if (performance.now() - lastYieldTime > 30) {
@@ -1932,13 +2048,15 @@ return true;
 // ── Stage 1: exact — repeat until no further matches succeed
 let exactPass = 0;
 let exactChanged = true;
+const MAX_STAGE_PASSES = 50;
 while (exactChanged) {
 exactChanged = false;
 exactPass++;
+if (exactPass > MAX_STAGE_PASSES) break;
 for (const pi of unmatchedNow()) {
 if (await tryPattern(pi, 'exact', null)) exactChanged = true;
 }
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 }
 runHistory.push({ stage: 'exact', passes: exactPass });
 
@@ -1976,13 +2094,15 @@ else recordFailure(pi, 'Gate: no exact bookend pair (deferred)', 0);
 }
 let deferredExactPass = 0;
 let deferredChanged = true;
+const MAX_DEFERRED_PASSES = 50;
 while (deferredChanged) {
 deferredChanged = false;
 deferredExactPass++;
+if (deferredExactPass > MAX_DEFERRED_PASSES) break;
 for (const pi of unmatchedDeferred()) {
 if (await tryPattern(pi, 'exact', null)) deferredChanged = true;
 }
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 }
 runHistory.push({ stage: 'exact-deferred', passes: deferredExactPass });
 for (const strategy of ['word', 'ngram']) {
@@ -2013,11 +2133,6 @@ if (m.kind === 'ambiguity') {
 work.splice(m.pos, 0, MARKER_LINE);
 }
 }
-}
-
-if (signal?.aborted && pendingQueue.length > 0) {
-partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
-throw new Error('Operation cancelled');
 }
 
 const newContent = cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n')));
@@ -2066,6 +2181,20 @@ if (showStatus) showStatus('No valid blocks found. Use blank line to separate se
 return { newContent: contentRaw, totalApplied: 0, reports: [], patternsMatched: 0, totalRules: 0, usedCount: 0, usedBlocks: new Set() };
 }
 
+const duplicateOfBlock = new Map();
+{
+const seenBlockKeys = new Map();
+for (let i = 0; i < blocks.length; i++) {
+const key = normalizeForComparison(blocks[i].searchLines.join('\n'));
+if (key.length === 0) continue;
+if (seenBlockKeys.has(key)) {
+duplicateOfBlock.set(i, seenBlockKeys.get(key));
+} else {
+seenBlockKeys.set(key, i);
+}
+}
+}
+
 let work = norm(contentRaw).split('\n');
 const markers = [];
 let totalApplied = 0;
@@ -2092,6 +2221,22 @@ const minLiteralLines = Math.max(1, matchLinesCount);
 const runHistory = [];
 const blockOutcome = new Map();
 let mode2LastYieldTime = performance.now();
+
+const capturePartialSnapshot = () => {
+partialReplaceSnapshot = {
+newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))),
+totalApplied,
+usedBlocks: new Set(usedBlocks),
+usedCount: usedBlocks.size
+};
+};
+
+const abortIfCancelled = () => {
+if (signal?.aborted) {
+capturePartialSnapshot();
+throw new Error('Operation cancelled');
+}
+};
 
 function recordBlockFailure(bi, reason, bestSim) {
 const o = blockOutcome.get(bi) || { success: false, bestSimilarity: 0, originalLineCount: 0, replacementLineCount: 0, failureReasons: [] };
@@ -2123,10 +2268,18 @@ const unmatchedBlocksNow = () => unmatchedBlocks().filter(bi => !isFenceBlock(bl
 const unmatchedBlocksDeferred = () => unmatchedBlocks().filter(bi => isFenceBlock(blocks[bi]));
 
 async function tryBlock(bi, strategy, windows) {
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 const block = blocks[bi];
 const searchLines = block.searchLines;
 const replLines = block.replLines;
+
+if (duplicateOfBlock.has(bi)) {
+if (!usedBlocks.has(bi)) {
+usedBlocks.add(bi);
+recordBlockFailure(bi, 'Duplicate of pair #' + (duplicateOfBlock.get(bi) + 1) + ' — deleted', 0);
+}
+return false;
+}
 
 if (searchLines.length === 0) {
 recordBlockFailure(bi, 'Search lines missing', 0);
@@ -2158,6 +2311,7 @@ scanPositions = windows.map(w => w[0]);
 const candidates = [];
 const totalIter = scanPositions ? scanPositions.length : work.length;
 for (let sIdx = 0; sIdx < totalIter; sIdx++) {
+abortIfCancelled();
 const i = scanPositions ? scanPositions[sIdx] : sIdx;
 if (performance.now() - mode2LastYieldTime > 30) {
 if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length} · ${strategy}`, 'info', true);
@@ -2265,26 +2419,32 @@ return true;
 // ── Stage 1: exact — repeat until no further matches
 let exactPass = 0;
 let exactChanged = true;
+const MAX_STAGE_PASSES = 50;
 while (exactChanged) {
 exactChanged = false;
 exactPass++;
+if (exactPass > MAX_STAGE_PASSES) break;
 for (const bi of unmatchedBlocksNow()) {
 if (await tryBlock(bi, 'exact', null)) exactChanged = true;
 }
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 }
 runHistory.push({ stage: 'exact', passes: exactPass });
 
 // ── Stage 2: bookend gate — exact first/last anchor pair
 const windowsByBlock = new Map();
-for (const bi of unmatchedBlocksNow()) {
-const searchLines = blocks[bi].searchLines;
-const first = searchLines[0] || '';
-const last = searchLines[searchLines.length - 1] || null;
-const wins = findBookendWindows(work, { firstLine: first, lastLine: last });
-if (wins.length > 0) windowsByBlock.set(bi, wins);
-else recordBlockFailure(bi, 'Gate: no exact bookend pair', 0);
-}
+	for (const bi of unmatchedBlocksNow()) {
+		const searchLines = blocks[bi].searchLines;
+		const nonEmpty = searchLines.map(l => l.trim()).filter(l => l.length > 0);
+		const wins = findBookendWindows(work, {
+			firstLines: nonEmpty,
+			lastLines: nonEmpty.slice().reverse(),
+			firstLine: nonEmpty[0] || '',
+			lastLine: nonEmpty[nonEmpty.length - 1] || ''
+		});
+		if (wins.length > 0) windowsByBlock.set(bi, wins);
+		else recordBlockFailure(bi, 'Gate: no exact bookend pair', 0);
+	}
 
 // ── Stages 3 & 4: word → ngram (stage 4 was word, stage 3 was ngram — swapped)
 for (const strategy of ['word', 'ngram']) {
@@ -2301,23 +2461,29 @@ await new Promise(r => setTimeout(r, 0));
 // ── Deferred pass: code-fence blocks are handled last, untouched by earlier stages
 if (unmatchedBlocksDeferred().length > 0) {
 const deferredWins = new Map();
-for (const bi of unmatchedBlocksDeferred()) {
-const searchLines = blocks[bi].searchLines;
-const first = searchLines[0] || '';
-const last = searchLines[searchLines.length - 1] || null;
-const wins = findBookendWindows(work, { firstLine: first, lastLine: last });
-if (wins.length > 0) deferredWins.set(bi, wins);
-else recordBlockFailure(bi, 'Gate: no exact bookend pair (deferred)', 0);
-}
+		for (const bi of unmatchedBlocksDeferred()) {
+			const searchLines = blocks[bi].searchLines;
+			const nonEmpty = searchLines.map(l => l.trim()).filter(l => l.length > 0);
+			const wins = findBookendWindows(work, {
+				firstLines: nonEmpty,
+				lastLines: nonEmpty.slice().reverse(),
+				firstLine: nonEmpty[0] || '',
+				lastLine: nonEmpty[nonEmpty.length - 1] || ''
+			});
+			if (wins.length > 0) deferredWins.set(bi, wins);
+			else recordBlockFailure(bi, 'Gate: no exact bookend pair (deferred)', 0);
+		}
 let deferredExactPass = 0;
 let deferredChanged = true;
+const MAX_DEFERRED_PASSES = 50;
 while (deferredChanged) {
 deferredChanged = false;
 deferredExactPass++;
+if (deferredExactPass > MAX_DEFERRED_PASSES) break;
 for (const bi of unmatchedBlocksDeferred()) {
 if (await tryBlock(bi, 'exact', null)) deferredChanged = true;
 }
-if (signal?.aborted) throw new Error('Operation cancelled');
+abortIfCancelled();
 }
 runHistory.push({ stage: 'exact-deferred', passes: deferredExactPass });
 for (const strategy of ['word', 'ngram']) {
@@ -2702,10 +2868,10 @@ function analyseMode1(raw, sep) {
 const patterns = parseMode1Pattern(raw, sep) || [];
 const lines = norm(raw).split('\n');
 const { allPairs } = parseFenceInfos(lines);
-// Count all fence pairs (not only those with level === 0)
-const totalPairs = allPairs.length;
-const potential = Math.floor(totalPairs / 2);
-return { valid: patterns.length, potential };
+const total = Math.floor(allPairs.length / 2);
+const valid = patterns.length;
+const potential = Math.max(0, total - valid);
+return { valid, potential };
 }
 
 function clearCaches() {
@@ -3149,7 +3315,23 @@ if (err.message === 'Operation cancelled') {
 if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0) {
 contentArea.value = partialReplaceSnapshot.newContent;
 lastAppliedCount = partialReplaceSnapshot.totalApplied;
+lastUsedCount = partialReplaceSnapshot.usedCount || 0;
 commitSnapshot();
+updateStats();
+}
+if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0 && currentMode === 1 && partialReplaceSnapshot.patterns) {
+rebuildMode1RulesComplete(
+originalRawRules,
+partialReplaceSnapshot.patterns,
+partialReplaceSnapshot.usedPatterns || new Set(),
+lockedPattern ? lockedPattern.checked : false,
+partialReplaceSnapshot.skippedRanges
+);
+updateStats();
+} else if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0 && currentMode === 2 && partialReplaceSnapshot.usedBlocks) {
+const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'));
+const newBlocks = allBlocks.filter((_, idx) => !partialReplaceSnapshot.usedBlocks.has(idx));
+patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join('\n\n');
 updateStats();
 }
 showStatus('⏹️ Operation cancelled.', 'warning');
