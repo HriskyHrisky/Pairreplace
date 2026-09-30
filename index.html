@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Text Replacement – Template Fill (Order‑Preserving)</title>
 <style>
+* { box-sizing: border-box; }
 body { background: #f6f8fa; font-family: 'Inter', system-ui, sans-serif; padding: 30px 16px; color: #1e293b; min-height: 100vh; display: flex; justify-content: center; }
 .app { max-width: 1100px; width: 100%; background: #fff; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08); padding: 24px 28px 32px; }
 h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -20,7 +21,6 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 .toggle-wrap { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; cursor: pointer; user-select: none; transition: opacity 0.2s; }
 .toggle-wrap input[type="checkbox"] { width: 18px; height: 18px; accent-color: #3b82f6; cursor: pointer; }
 .toggle-wrap input[type="checkbox"]:disabled { accent-color: #94a3b8; cursor: not-allowed; }
-select { padding: 4px 8px; border: 1.5px solid #d1d9e6; font-size: 14px; background: #fff; }
 .mode-tabs { display: flex; gap: 4px; background: #f1f5f9; padding: 4px; margin-bottom: 18px; border: 1px solid #e2e8f0; }
 .mode-tab { flex: 1; border: none; background: transparent; padding: 10px 12px; font-size: 15px; font-weight: 500; color: #64748b; cursor: pointer; transition: all 0.2s; text-align: center; }
 .mode-tab.active { background: #fff; color: #0f172a; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
@@ -53,12 +53,6 @@ select { padding: 4px 8px; border: 1.5px solid #d1d9e6; font-size: 14px; backgro
 .status-msg { margin-top: 10px; padding: 8px 16px; font-size: 14px; font-weight: 500; text-align: center; }
 .status-msg.warning { background: #fef3c7; color: #92400e; }
 .status-msg.info { background: #e0f2fe; color: #075985; }
-.modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 16px; }
-.modal-backdrop.open { display: flex; }
-.modal { background: #fff; max-width: 420px; width: 100%; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25); }
-.modal-title { font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
-.modal-body { font-size: 14px; color: #475569; margin-bottom: 18px; line-height: 1.55; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .btn-danger { background: #dc2626; color: #fff; }
 .btn-danger:hover { background: #b91c1c; }
 .action-group { display: flex; gap: 4px; }
@@ -99,7 +93,7 @@ select { padding: 4px 8px; border: 1.5px solid #d1d9e6; font-size: 14px; backgro
 <div class="global-item" style="width:100%; margin-bottom:10px;">
 <label for="similarityRange">Similarity threshold</label>
 <input type="range" id="similarityRange" min="0" max="100" value="80" />
-<span class="val" id="similarityVal">80%</span>
+<output class="val" id="similarityVal" for="similarityRange">80%</output>
 </div>
 
 <div class="toggle-group">
@@ -109,8 +103,9 @@ select { padding: 4px 8px; border: 1.5px solid #d1d9e6; font-size: 14px; backgro
 <label for="ellipsisWildcard">Enable … as wildcard</label>
 </div>
 <div class="toggle-wrap child-toggle" id="greedyEllipsisWrap">
-<input type="checkbox" id="greedyEllipsis" checked title="If ON, tries to match as many lines as possible (last valid anchor). If OFF, matches as few as possible (first valid anchor)." />
+<input type="checkbox" id="greedyEllipsis" title="If ON, tries to match as many lines as possible (last valid anchor). If OFF, matches as few as possible (first valid anchor)." />
 <label for="greedyEllipsis">Longest match first</label>
+<button type="button" id="greedyConfirmBtn" class="btn btn-outline hidden" style="padding: 2px 10px; font-size: 12px; margin-left: 6px;" title="Re-run with longest-match mode confirmed.">✓ Confirm</button>
 </div>
 <div class="toggle-wrap child-toggle" id="lineWildcardWrap">
 <input type="checkbox" id="lineWildcard" title="If ON, any line that contains … is treated as a whole‑line wildcard, capturing the entire content line." />
@@ -133,6 +128,10 @@ select { padding: 4px 8px; border: 1.5px solid #d1d9e6; font-size: 14px; backgro
 <label for="organizeModeToggle" title="Enforces stricter matching thresholds to prevent wildcard bleed.">Organize mode (strict anchor matching)</label>
 </div>
 <div class="toggle-wrap" style="margin-top: 8px;">
+<input type="checkbox" id="allOrNoneToggle" title="If ON, no changes are applied unless every rule matches." />
+<label for="allOrNoneToggle">All or none</label>
+</div>
+<div class="toggle-wrap" style="margin-top: 8px;">
 <input type="checkbox" id="interpretEscapesToggle" />
 <label for="interpretEscapesToggle">Interpret \n, \t, \r as control chars</label>
 </div>
@@ -153,16 +152,16 @@ Mode 2 · Block matching
 <h2 class="sr-only">Content and Rules</h2>
 <div class="textarea-grid">
 <div class="textarea-box">
-<label>Content (textarea 1)
+<label for="contentArea">Content (textarea 1)
 <span class="pattern-extras"><span class="count" id="contentCharCount">0 chars</span><span class="pattern-line-badge" id="contentLineBadge">0 lines</span></span>
 </label>
-<textarea id="contentArea" placeholder="Paste content…"></textarea>
+<textarea id="contentArea" placeholder="Paste content…" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 </div>
 <div class="textarea-box">
-<label>Rules (textarea 2)
+<label for="patternArea">Rules (textarea 2)
 <span class="pattern-extras"><span class="count" id="patternCharCount">0 chars</span><span class="pattern-line-badge" id="patternLineBadge">0 lines</span></span>
 </label>
-<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated by empty lines (first k non-empty lines = signature, rest = replacement)"></textarea>
+<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated by empty lines (first k non-empty lines = signature, rest = replacement)" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 <div class="stats-row">
 <span class="stat-badge">✅: <span id="appliedCount">0</span></span>
 <span class="stat-badge" title="Actual Applied − Unique patterns (greater than 0 only when Apply once is OFF)">Ambiguity: <span id="usedRules">0</span></span>
@@ -171,14 +170,11 @@ Mode 2 · Block matching
 </div>
 </div>
 </div>
-
 <div id="mode1Controls" class="mode-controls">
 <div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace" /></label></div>
 </div>
 <div id="mode2Controls" class="mode-controls hidden">
 <div class="group"><label>Min matched lines: <input type="number" id="mode2Threshold" value="2" min="1" max="20" aria-label="Minimum matched lines for Mode 2" /></label></div>
-<div class="group"><label>Similarity % <input type="number" id="mode2Sim" value="80" min="0" max="100" aria-label="Similarity percentage for Mode 2" /></label></div>
-<div class="group"><label>Unreliable chars tolerance: <input type="number" id="mode2Tolerance" value="0" min="0" max="20" aria-label="Unreliable characters tolerance" /></label></div>
 </div>
 <div class="mode-hint" id="modeHint">
 <span id="modeHintText"></span>
@@ -192,15 +188,19 @@ Mode 2 · Block matching
 <button type="button" class="btn btn-outline" id="undoBtn" disabled>Undo</button>
 <button type="button" class="btn btn-outline" id="redoBtn" disabled>Redo</button>
 </div>
+<div class="toggle-wrap" id="autoCopyWrap" style="margin-left: 6px;">
+<input type="checkbox" id="autoCopyToggle" title="When ON, the resulting content is copied to clipboard after each Replace." />
+<label for="autoCopyToggle">Auto-copy result</label>
+</div>
 </div>
 
 <div id="statusMessage" class="status-msg hidden" role="status" aria-live="polite"></div>
 <h2 class="sr-only">Match Report</h2>
 <div id="matchDetails" class="match-details hidden">
-<div style="font-weight:600; margin-bottom:6px;">Match report</div>
+<h3 style="font-weight:600; margin:0 0 6px 0; font-size:14px;">Match report</h3>
 <div id="matchReport"></div>
 </div>
-<div class="footer-hint"><span>⋯ <strong>…</strong> literal ellipsis, <strong>…</strong> wildcard. Greediness is controlled by the <strong>Longest match first</strong> toggle.</span></div>
+<div class="footer-hint"><span>⋯ <strong>...</strong> literal ellipsis, <strong>...</strong> wildcard. Greediness is controlled by the <strong>Longest match first</strong> toggle.</span></div>
 <div id="resetPopper" class="popper" role="dialog" aria-labelledby="resetPopperTitle">
 <div class="popper-arrow"></div>
 <div class="popper-title" id="resetPopperTitle">Reset everything?</div>
@@ -210,12 +210,20 @@ Mode 2 · Block matching
 <button type="button" class="btn btn-danger" id="resetPopperOk">Reset</button>
 </div>
 </div>
+<hr>
+<div class="textarea-grid" style="grid-template-columns: 1fr; margin-top: 0; margin-bottom: 14px;">
+<div class="textarea-box">
+<label for="parkingArea">Parking (scratch — not affected by undo/redo, Reset, Replace All, or Swap · auto-saved to browser)</label>
+<textarea id="parkingArea" placeholder="Scratch space — auto-saved to localStorage, not tracked by undo/redo/Reset" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+</div>
+</div>
 </div>
 <script>
 // jshint esversion: 11
 /* ================= DOM refs ================= */
 const contentArea = document.getElementById('contentArea');
 const patternArea = document.getElementById('patternArea');
+const parkingArea = document.getElementById('parkingArea');
 const similarityRange = document.getElementById('similarityRange');
 const similarityVal = document.getElementById('similarityVal');
 const appliedCountSpan = document.getElementById('appliedCount');
@@ -251,12 +259,15 @@ const matchReport = document.getElementById('matchReport');
 const greedyEllipsisWrap = document.getElementById('greedyEllipsisWrap');
 const lineWildcardWrap = document.getElementById('lineWildcardWrap');
 const allowAmbiguityToggle = document.getElementById('allowAmbiguityToggle');
+const allOrNoneToggle = document.getElementById('allOrNoneToggle');
 const interpretEscapesToggle = document.getElementById('interpretEscapesToggle');
 const organizeModeToggle = document.getElementById('organizeModeToggle');
 const showMarkersToggle = document.getElementById('showMarkersToggle');
 const resetPopper = document.getElementById('resetPopper');
 const resetPopperOk = document.getElementById('resetPopperOk');
 const resetPopperCancel = document.getElementById('resetPopperCancel');
+const greedyConfirmBtn = document.getElementById('greedyConfirmBtn');
+const autoCopyToggle = document.getElementById('autoCopyToggle');
 
 
 // -------------------- Global state --------------------
@@ -271,9 +282,10 @@ let statusTimeout = null;
 
 const undoStack = [];
 const redoStack = [];
-const MAX_UNDO_STACK = 100;
+const MAX_UNDO_STACK = 50;
 let lastSnapshot = null;
 let inputCommitTimer = null;
+let partialReplaceSnapshot = null;
 
 let protectBoundariesEnabled = true;
 
@@ -284,6 +296,22 @@ const LITERAL_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'LTD';
 const WILDCARD_ELLIPSIS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WEL';
 const WILDCARD_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WTD';
 const MARKER_LINE = '// ‼️';
+
+// -------------------- Parking (local save only) --------------------
+const PARKING_STORAGE_KEY = 'textReplacementParking_v1';
+
+function saveParking() {
+try {
+if (parkingArea) localStorage.setItem(PARKING_STORAGE_KEY, parkingArea.value);
+} catch (e) { /* ignore quota / private mode */ }
+}
+
+function loadParking() {
+try {
+const v = localStorage.getItem(PARKING_STORAGE_KEY);
+if (v !== null && parkingArea) parkingArea.value = v;
+} catch (e) { /* ignore */ }
+}
 
 // -------------------- Utility functions (unchanged) --------------------
 function stripInvisibleChars(s) {
@@ -517,7 +545,7 @@ const other = bgB.get(g) || 0;
 common += Math.min(c, other);
 }
 for (const [, c] of bgB) totalB += c;
-const dice = (totalA + totalB) > 0 ? (2 * common) / (totalA + totalB) : 1;
+const dice = (totalA + totalB) > 0 ? (2 * common) / (totalA + totalB) : 0;
 
 // Blend with full length ratio so "abc…xyz" vs "abcXYZ" doesn't over-score
 const lenRatio = Math.min(normA.length, normB.length) / Math.max(normA.length, normB.length);
@@ -567,7 +595,7 @@ j++;
 return totalCompared > 0 ? (validChars / totalCompared) * 100 : 100;
 }
 
-function compareWithTolerance(a, b, threshold, tolerance, isWildcardMode = false, startCol = 0) {
+function compareWithTolerance(a, b, isWildcardMode = false, startCol = 0) {
 if (startCol > 0 && !a.includes('\n')) {
 a = a.slice(startCol);
 }
@@ -582,8 +610,7 @@ let indexDirty = true;
 function buildNgramIndex(lines, n) {
 const index = new Map();
 for (let i = 0; i < lines.length; i++) {
-const normalizedLine = normalizeForComparison(restoreLiteralEllipsis(lines[i]));
-const grams = extractNgrams(normalizedLine, n);
+const grams = extractNgrams(restoreLiteralEllipsis(lines[i]), n);
 for (const g of grams) {
 if (!index.has(g)) index.set(g, []);
 index.get(g).push(i);
@@ -592,10 +619,17 @@ index.get(g).push(i);
 return index;
 }
 
-const NGRAM_FIXED = 5;
+const RETRIEVAL_N = 3;
 
 function getNgramN(searchLines) {
-return NGRAM_FIXED;
+return RETRIEVAL_N;
+}
+
+function adaptiveVerifyN(anchorLen, candidateLen) {
+const baseLen = Math.min(anchorLen, candidateLen);
+if (baseLen < 12) return 2;
+if (baseLen < 30) return 3;
+return 3 + Math.floor((baseLen - 30) / 200);
 }
 
 function extractNgrams(text, n) {
@@ -629,6 +663,10 @@ return { type: 'literal_line', text: restoreLiteralEllipsis(original).trim() };
 }
 const protectedLine = normalizeEllipsis(original);
 const trimmed = protectedLine.trim();
+
+if (lineWildcardEnabled && (protectedLine.includes(WILDCARD_ELLIPSIS_PLACEHOLDER) || protectedLine.includes(WILDCARD_THREE_DOTS_PLACEHOLDER))) {
+return { type: 'whole_wildcard', greedy: false };
+}
 
 const onlyEllipsis = /^(?:\s*)(?:\.{3}|…)(?:\s*)$/.test(trimmed);
 if (onlyEllipsis) {
@@ -709,6 +747,44 @@ __flexibleRegexSourceCache.set(literal, escaped);
 return new RegExp(escaped, 'gi');
 }
 
+function bitapSearch(text, pattern, maxErrors) {
+const m = pattern.length;
+if (m === 0) return { found: true, pos: 0, matchedLength: 0, allPositions: [0] };
+if (m > 64) return null;
+const lower = text.toLowerCase();
+const patLower = pattern.toLowerCase();
+if (maxErrors <= 0) {
+const idx = lower.indexOf(patLower);
+return idx === -1 ? { found: false } : { found: true, pos: idx, matchedLength: m, allPositions: [idx] };
+}
+const charMasks = new Map();
+for (let i = 0; i < m; i++) {
+const c = patLower[i];
+const bit = 1n << BigInt(i);
+charMasks.set(c, (charMasks.get(c) || 0n) | bit);
+}
+const allOnes = (1n << BigInt(m)) - 1n;
+const R = new Array(maxErrors + 1).fill(allOnes);
+const matches = [];
+for (let i = 0; i < lower.length; i++) {
+const c = lower[i];
+const mask = charMasks.get(c) || 0n;
+let prev = R[0];
+R[0] = ((R[0] << 1n) | 1n) & mask;
+for (let k = 1; k <= maxErrors; k++) {
+const cur = R[k];
+R[k] = (((R[k] << 1n) | 1n) & mask) | ((prev | (R[k - 1] << 1n)) << 1n) | prev;
+prev = cur;
+}
+if ((R[maxErrors] & (1n << BigInt(m - 1))) !== 0n) {
+const start = i - m + 1;
+if (start >= 0) matches.push(start);
+}
+}
+if (matches.length === 0) return { found: false };
+return { found: true, pos: matches[0], matchedLength: m, allPositions: matches };
+}
+
 function findLiteralTolerant(text, startPos, literal, greedy) {
 const searchText = text.slice(startPos);
 const regex = buildFlexibleRegex(literal);
@@ -717,6 +793,21 @@ let m;
 while ((m = regex.exec(searchText)) !== null) {
 matches.push({ index: m.index, length: m[0].length });
 if (m.index === regex.lastIndex) regex.lastIndex++;
+}
+if (matches.length === 0 && literal.length >= 4 && literal.length <= 64) {
+const bp = bitapSearch(searchText, literal, 1);
+if (bp && bp.found && bp.allPositions && bp.allPositions.length > 0) {
+const chosen = greedy ? bp.allPositions[bp.allPositions.length - 1] : bp.allPositions[0];
+const litLen = literal.length;
+let bestLen = litLen, bestSim = -1;
+for (const tryLen of [litLen - 1, litLen, litLen + 1]) {
+if (tryLen <= 0) continue;
+const cand = searchText.substring(chosen, chosen + tryLen);
+const s = similarityAnchor(cand, literal);
+if (s > bestSim) { bestSim = s; bestLen = tryLen; }
+}
+return { found: true, pos: startPos + chosen, matchedLength: bestLen };
+}
 }
 if (matches.length === 0) return { found: false };
 const chosen = greedy ? matches[matches.length - 1] : matches[0];
@@ -744,10 +835,26 @@ return { success: true, endPos: pos + literal.length };
 }
 const regex = buildFlexibleRegex(literal);
 const match = regex.exec(sub);
-if (!match || match.index !== 0) return { success: false };
+if (match && match.index === 0) {
 return { success: true, endPos: pos + match[0].length };
 }
-function matchInlineWildcardTokens(contentStr, tokens, isOrganizeMode = false, greedy = false, threshold = 80, tolerance = 0, startPos = 0) {
+if (literal.length >= 4 && literal.length <= 64) {
+const bp = bitapSearch(sub, literal, 1);
+if (bp && bp.found && bp.allPositions && bp.allPositions[0] === 0) {
+const litLen = literal.length;
+let bestLen = litLen, bestSim = -1;
+for (const tryLen of [litLen - 1, litLen, litLen + 1]) {
+if (tryLen <= 0) continue;
+const cand = sub.substring(0, tryLen);
+const s = similarityAnchor(cand, literal);
+if (s > bestSim) { bestSim = s; bestLen = tryLen; }
+}
+return { success: true, endPos: pos + bestLen };
+}
+}
+return { success: false };
+}
+function matchInlineWildcardTokens(contentStr, tokens, isOrganizeMode = false, greedy = false, threshold = 80, startPos = 0) {
 const haystack = contentStr.slice(startPos);
 const filteredTokens = tokens.filter(t => t.type !== 'literal' || t.text !== '');
 if (filteredTokens.length === 0) {
@@ -794,7 +901,7 @@ capIdx++;
 }
 }
 const sim = isOrganizeMode ? (reconstructed === matchedStr ? 100 : 0) :
-compareWithTolerance(reconstructed, matchedStr, threshold, 0);
+compareWithTolerance(reconstructed, matchedStr);
 if (sim < threshold) return null;
 
 const linesConsumed = matchedStr.split('\n').length - 1;
@@ -845,7 +952,7 @@ if (!firstLine || !lastLine) return null;
 return { firstLine, lastLine };
 }
 
-function findCandidateStarts(contentLines, anchors, ngramIndex, n = 20, strict = false, requiredDistance = -1) {
+function findCandidateStarts(contentLines, anchors, ngramIndex, n = RETRIEVAL_N, strict = false, requiredDistance = -1) {
 	if (!anchors || (!anchors.firstLine && !anchors.lastLine)) return [];
 
 	if (strict) {
@@ -899,8 +1006,8 @@ function findCandidateStarts(contentLines, anchors, ngramIndex, n = 20, strict =
 
 		const grams = extractNgrams(anchorText, n);
 		const ngramCandidates = new Set();
-		const MAX_NGRAM_CANDIDATES = 500;
-		const MAX_POSTINGS_PER_GRAM = 2000;
+		const MAX_NGRAM_CANDIDATES = 2000;
+		const MAX_POSTINGS_PER_GRAM = 500;
 		for (const gram of grams) {
 			const occurrences = ngramIndex.get(gram);
 			if (!occurrences) continue;
@@ -911,7 +1018,38 @@ function findCandidateStarts(contentLines, anchors, ngramIndex, n = 20, strict =
 			}
 			if (ngramCandidates.size >= MAX_NGRAM_CANDIDATES) break;
 		}
-		if (ngramCandidates.size > 0) return [...ngramCandidates].sort((a, b) => a - b);
+		if (ngramCandidates.size > 0) {
+			const anchorLen = normalizeForComparison(anchorText).length;
+			const anchorGramsCache = new Map();
+			const getAnchorGrams = (n) => {
+				if (anchorGramsCache.has(n)) return anchorGramsCache.get(n);
+				const g = extractNgrams(anchorText, n);
+				anchorGramsCache.set(n, g);
+				return g;
+			};
+			const verified = [];
+			for (const lineIdx of ngramCandidates) {
+				const lineText = contentLines[lineIdx];
+				const lineLen = normalizeForComparison(lineText).length;
+				const n = adaptiveVerifyN(anchorLen, lineLen);
+				const anchorGrams = getAnchorGrams(n);
+				const lineGrams = extractNgrams(lineText, n);
+				if (anchorGrams.size === 0 || lineGrams.size === 0) continue;
+				const denom = Math.min(anchorGrams.size, lineGrams.size);
+				const required = denom <= 5
+					? denom
+					: Math.max(3, Math.floor(denom * 0.30));
+				const [small, big] = anchorGrams.size <= lineGrams.size
+					? [anchorGrams, lineGrams]
+					: [lineGrams, anchorGrams];
+				let hits = 0;
+				for (const g of small) {
+					if (big.has(g)) hits++;
+				}
+				if (hits >= required) verified.push(lineIdx);
+			}
+			if (verified.length > 0) return verified.sort((a, b) => a - b);
+		}
 
 		const anchorWords = cleanAnchor.split(/\s+/).map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toLowerCase()).filter(Boolean);
 		if (anchorWords.length > 0) {
@@ -933,27 +1071,8 @@ function findCandidateStarts(contentLines, anchors, ngramIndex, n = 20, strict =
 	return candidates.length > 0 ? candidates.sort((a, b) => a - b) : [];
 }
 
-function findLiteralInLine(lineText, startCol, literal) {
-if (!lineText || literal === '') return -1;
-let pos = lineText.indexOf(literal, startCol);
-if (pos !== -1) return pos;
-const collapseText = lineText.replace(/[ \t]+/g, ' ');
-const collapseLit = literal.replace(/[ \t]+/g, ' ');
-const searchFrom = startCol;
-const sub = collapseText.substring(searchFrom);
-const idx = sub.indexOf(collapseLit);
-if (idx === -1) return -1;
-const pattern = literal.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
-const regex = new RegExp(pattern, 'i');
-const match = lineText.slice(searchFrom).match(regex);
-if (match) {
-return searchFrom + match.index;
-}
-return -1;
-}
-
 // -------------------- matchPatternLineBased (with fixed cursor advancement) (unchanged) --------------------
-function matchPatternLineBased(contentLines, start, items, threshold, greedy, tolerance, startCol = 0) {
+function matchPatternLineBased(contentLines, start, items, threshold, greedy, startCol = 0) {
 let cursorLine = start;
 let cursorCol = startCol;
 let captured = []; // { itemIndex, captures }
@@ -978,8 +1097,6 @@ const item = items[i];
 			const blockSim = compareWithTolerance(
 				sourceBlock,
 				patternBlock,
-				threshold,
-				0,
 				false,
 				0
 			);
@@ -1005,7 +1122,6 @@ item.tokens,
 false,
 greedy,
 threshold,
-0,
 0
 );
 if (!result || !result.success) return { success: false };
@@ -1034,7 +1150,7 @@ captured.push({ itemIndex: i, captures: contentLines.slice(cursorLine).map(Strin
 cursorLine = contentLines.length;
 break;
 }
-const candidates = findAnchorLinePositions(contentLines, cursorLine, nextItem, threshold, 0, cursorCol);
+const candidates = findAnchorLinePositions(contentLines, cursorLine, nextItem, threshold, cursorCol);
 if (candidates.length === 0) return { success: false };
 const anchorStart = greedy ? candidates[candidates.length - 1] : candidates[0];
 captured.push({ itemIndex: i, captures: contentLines.slice(cursorLine, anchorStart).map(String) });
@@ -1055,7 +1171,7 @@ minSim: sims.length ? Math.min(...sims) : 100
 };
 }
 
-function findAnchorLinePositions(contentLines, fromIdx, anchorItem, threshold, tolerance, startCol = 0) {
+function findAnchorLinePositions(contentLines, fromIdx, anchorItem, threshold, startCol = 0) {
 const positions = [];
 
 if (anchorItem.type === 'literal_block') {
@@ -1064,7 +1180,7 @@ for (let i = fromIdx; i <= contentLines.length - lines.length; i++) {
 let ok = true;
 for (let j = 0; j < lines.length; j++) {
 const colToUse = (j === 0) ? startCol : 0;
-const sim = compareWithTolerance(contentLines[i + j], lines[j], threshold, 0, false, colToUse);
+const sim = compareWithTolerance(contentLines[i + j], lines[j], false, colToUse);
 if (sim < threshold) { ok = false; break; }
 }
 if (ok) positions.push(i);
@@ -1075,7 +1191,7 @@ let remaining = contentLines[i].slice(startCol);
 for (let l = i + 1; l < contentLines.length; l++) {
 remaining += '\n' + contentLines[l];
 }
-const res = matchInlineWildcardTokens(remaining, anchorItem.tokens, false, false, threshold, 0, 0);
+const res = matchInlineWildcardTokens(remaining, anchorItem.tokens, false, false, threshold, 0);
 if (res?.success) positions.push(i);
 }
 }
@@ -1140,7 +1256,7 @@ identifier: null // not used; we use prefix matching
 };
 }
 
-async function OrganizeMode(work, searchLines, replLines, threshold, greedy, tolerance, applyMultipleMatches, signal, showStatus, pairInfo) {
+async function OrganizeMode(work, searchLines, replLines, threshold, greedy, applyMultipleMatches, signal, showStatus, pairInfo) {
 if (!Array.isArray(work)) work = [];
 if (!Array.isArray(searchLines)) searchLines = [];
 if (!Array.isArray(replLines)) replLines = [];
@@ -1189,9 +1305,10 @@ if (searchItems[0]?.type === 'wildcard') startMin = 0;
 
 const allCandidates = [];
 let lastOrganizeYieldTime = performance.now();
+let organizeAborted = false;
 for (let i = startMin; i <= startMax; i++) {
-if (signal?.aborted) throw new Error('Operation cancelled');
-const res = matchPatternLineBased(work, i, searchItems, threshold, greedy, 0);
+if (signal?.aborted) { organizeAborted = true; break; }
+const res = matchPatternLineBased(work, i, searchItems, threshold, greedy);
 if (res.success && res.match) {
 allCandidates.push({
 start: i,
@@ -1202,7 +1319,7 @@ captured: res.match.captured
 });
 }
 		if (performance.now() - lastOrganizeYieldTime > 30) {
-			if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total}`, 'info');
+			if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total}`, 'info', true);
 			await new Promise(r => setTimeout(r, 0));
 			lastOrganizeYieldTime = performance.now();
 		}
@@ -1480,11 +1597,12 @@ newWork: currentWork,
 avgSim,
 totalOriginalLines: applied ? work.length : 0,
 totalNewLines: applied ? currentWork.length : 0,
-appliedCount: totalAppliedCount
+appliedCount: totalAppliedCount,
+aborted: organizeAborted || !!signal?.aborted
 };
 }
 // -------------------- ReplaceMode1 (with marker adjustment and wildcard counting) (unchanged) --------------------
-async function ReplaceMode1(content, rules, threshold, greedy, applyMultipleMatches, tolerance, originalContent, originalRawRules, signal, showStatus, updateStats) {
+async function ReplaceMode1(content, rules, threshold, greedy, applyMultipleMatches, originalContent, originalRawRules, signal, showStatus, updateStats) {
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
 
 	const sep = separatorInput ? separatorInput.value.trim() : '';
@@ -1517,7 +1635,6 @@ const usedPatterns = new Set();
 let work = norm(content).split('\n');
 const markers = [];
 let totalApplied = 0;
-const reports = [];
 const shouldShowMarkers = showMarkers && !applyMultipleMatches;
 let globalOffset = 0;
 
@@ -1535,12 +1652,47 @@ m.pos += diff;
 }
 
 const pendingQueue = patterns.map((_, i) => i);
-const MAX_RETRY_RUNS = 3;
+const runHistory = [];
+const patternOutcome = new Map();
+const changedRegions = [];
 let runCount = 0;
-let mode1LastYieldTime = performance.now();
-	while (pendingQueue.length > 0 && runCount < MAX_RETRY_RUNS) {
+
+function recordSuccess(pi, match, replacementLineCount) {
+const o = patternOutcome.get(pi) || { success: false, applications: 0, bestSimilarity: 0, totalOriginalLines: 0, totalReplacementLines: 0, failureReasons: [] };
+o.success = true;
+o.applications++;
+o.bestSimilarity = Math.max(o.bestSimilarity, Math.round(match.avgSim || 0));
+o.totalOriginalLines += Math.max(0, (match.end || 0) - (match.start || 0));
+o.totalReplacementLines += Math.max(0, replacementLineCount || 0);
+patternOutcome.set(pi, o);
+}
+
+function recordFailure(pi, reason, bestSim) {
+const o = patternOutcome.get(pi) || { success: false, applications: 0, bestSimilarity: 0, totalOriginalLines: 0, totalReplacementLines: 0, failureReasons: [] };
+o.bestSimilarity = Math.max(o.bestSimilarity, Math.round(bestSim || 0));
+if (!o.success && o.failureReasons.length < 3) o.failureReasons.push(reason);
+patternOutcome.set(pi, o);
+}
+
+function recordChange(start, oldLen, newLen) {
+changedRegions.push({ start, oldLen, newLen });
+}
+
+function getRetryWindow(patternSpan) {
+if (changedRegions.length === 0) return null;
+let lo = work.length, hi = 0;
+for (const c of changedRegions) {
+const end = c.start + Math.max(c.oldLen, c.newLen);
+lo = Math.min(lo, Math.max(0, c.start - patternSpan));
+hi = Math.max(hi, Math.min(work.length - 1, end + patternSpan));
+}
+return { lo, hi };
+}
+
+	while (pendingQueue.length > 0) {
 		runCount++;
 		const currentQueue = pendingQueue.splice(0);
+		changedRegions.length = 0;
 		for (const pi of currentQueue) {
 		if (signal?.aborted) throw new Error('Operation cancelled');
 		const pat = patterns[pi];
@@ -1548,7 +1700,7 @@ let mode1LastYieldTime = performance.now();
 		const replLines = pat.replLines;
 
 		if (!searchLines || searchLines.length === 0) {
-			reports.push({ bestSimilarity: 0, success: false, failureReason: 'Search block is empty' });
+			recordFailure(pi, 'Search block is empty', 0);
 			continue;
 		}
 const organizeToggleChecked = organizeModeToggle ? organizeModeToggle.checked : false;
@@ -1567,7 +1719,7 @@ modeStatusBadge.textContent = `📏 Normal (${wildcardCount} wildcards)`;
 }
 
 			if (isOrganizeMode) {
-				const result = await OrganizeMode(work, searchLines, replLines, threshold, greedy, 0, applyMultipleMatches, signal, showStatus, { current: pi + 1, total: patterns.length });
+const result = await OrganizeMode(work, searchLines, replLines, threshold, greedy, applyMultipleMatches, signal, showStatus, { current: pi + 1, total: patterns.length });
 if (result.applied) {
 const oldLen = work.length;
 work = result.newWork;
@@ -1575,20 +1727,15 @@ const newLen = work.length;
 globalOffset += (newLen - oldLen);
 totalApplied += result.appliedCount;
 usedPatterns.add(pi);
-reports.push({
-bestSimilarity: Math.round(result.avgSim),
-success: true,
-originalLineCount: result.totalOriginalLines,
-replacementLineCount: result.totalNewLines,
-failureReason: null
-});
+recordChange(0, oldLen, newLen);
+recordSuccess(pi, { avgSim: result.avgSim, start: 0, end: result.totalOriginalLines }, result.totalNewLines);
 markIndexDirty();
 } else {
-reports.push({
-bestSimilarity: 0,
-success: false,
-failureReason: result.failureReason || 'No matching block found'
-});
+recordFailure(pi, result.failureReason || 'No matching block found', 0);
+}
+if (result.aborted) {
+partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
+throw new Error('Operation cancelled');
 }
 } else {
 let { items } = buildPatternItems(searchLines, lineWildcardEnabled);
@@ -1620,6 +1767,15 @@ const ngramN = getNgramN(searchLines);
 		}
 if (items[0]?.type === 'wildcard') startMin = 0;
 
+// Retry windowing: on retries, only scan regions touched by previous changes
+if (runCount > 1 && !usedPatterns.has(pi)) {
+const retryWin = getRetryWindow(searchLines.length);
+if (!retryWin) { recordFailure(pi, 'No changes to re-determine', 0); continue; }
+startMin = Math.max(startMin, retryWin.lo);
+startMax = Math.min(startMax, retryWin.hi);
+if (startMin > startMax) { recordFailure(pi, 'No changes in retry window', 0); continue; }
+}
+
 // Clamp scan range: never attempt positions that cannot possibly fit minPatternLines
 if (minPatternLines > 0) {
 startMax = Math.min(startMax, work.length - minPatternLines);
@@ -1632,12 +1788,12 @@ let lastYieldTime = performance.now();
 for (let i = startMin; i <= startMax; i++) {
 if (signal?.aborted) throw new Error('Operation cancelled');
 attemptedPositions++;
-const res = matchPatternLineBased(work, i, items, threshold, greedy, 0);
+const res = matchPatternLineBased(work, i, items, threshold, greedy);
 if (res.success) {
 allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
 }
 		if (performance.now() - lastYieldTime > 30) {
-			if (showStatus) showStatus(`⏳ Pair ${pi + 1}/${patterns.length}`, 'info');
+			if (showStatus) showStatus(`⏳ Pair ${pi + 1}/${patterns.length}`, 'info', true);
 			await new Promise(r => setTimeout(r, 0));
 			lastYieldTime = performance.now();
 		}
@@ -1663,12 +1819,12 @@ allCandidates = [];
 let lastFallbackYieldTime = performance.now();
 for (let i = startMin; i <= startMax; i++) {
 if (signal?.aborted) throw new Error('Operation cancelled');
-const res = matchPatternLineBased(work, i, items, threshold, greedy, 0);
+const res = matchPatternLineBased(work, i, items, threshold, greedy);
 if (res.success) {
 allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
 }
 						if (performance.now() - lastFallbackYieldTime > 30) {
-							if (showStatus) showStatus(`⏳ Pair ${pi + 1}/${patterns.length} · fallback`, 'info');
+							if (showStatus) showStatus(`⏳ Pair ${pi + 1}/${patterns.length} · fallback`, 'info', true);
 							await new Promise(r => setTimeout(r, 0));
 							lastFallbackYieldTime = performance.now();
 						}
@@ -1678,7 +1834,7 @@ replLines.length = 0;
 replLines.push(...literalReplLines);
 }
 if (allCandidates.length === 0) {
-reports.push({ bestSimilarity: 0, success: false, failureReason: bookend ? (attemptedPositions === 0 ? 'No candidate start position' : `No full match at any of ${attemptedPositions} position(s)`) : '' });
+recordFailure(pi, bookend ? (attemptedPositions === 0 ? 'No candidate start position' : `No full match at any of ${attemptedPositions} position(s)`) : 'No match', 0);
 continue;
 }
 }
@@ -1755,11 +1911,7 @@ markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end 
 }
 
 if (matchesToProcess.length === 0 && allCandidates.length > 0) {
-reports.push({
-bestSimilarity: Math.round(allCandidates[0]?.avgSim ?? 0),
-success: false,
-failureReason: 'All matches overlap with previous applications'
-});
+recordFailure(pi, 'All matches overlap with previous applications', allCandidates[0]?.avgSim || 0);
 continue;
 }
 
@@ -1786,31 +1938,26 @@ if (replacement.length > 3 && collapseWS(originalBlock) === collapseWS(newBlock)
 // identical and replacement has more than 3 lines: skip applying, just remove rule
 totalApplied++;
 usedPatterns.add(pi);
-reports.push({
-bestSimilarity: Math.round(match.avgSim),
-success: true,
-originalLineCount: match.end - match.start,
-replacementLineCount: replacement.length,
-failureReason: null,
-identicalSkipped: true
-});
+recordSuccess(pi, match, replacement.length);
+const o = patternOutcome.get(pi); if (o) o.identicalSkipped = true;
 } else {
 applyReplacementAndAdjustMarkers(match.start, match.end, replacement);
+recordChange(match.start, match.end - match.start, replacement.length);
 totalApplied++;
 usedPatterns.add(pi);
-reports.push({
-bestSimilarity: Math.round(match.avgSim),
-success: true,
-originalLineCount: match.end - match.start,
-replacementLineCount: replacement.length,
-failureReason: null
-});
+recordSuccess(pi, match, replacement.length);
 }
 				markIndexDirty();
 			}
 		}
 		await new Promise(r => setTimeout(r, 0));
 		}
+		runHistory.push({
+			run: runCount,
+			pendingBefore: currentQueue.length,
+			newlyApplied: currentQueue.filter(pi => usedPatterns.has(pi)).length,
+			pendingAfter: pendingQueue.length
+		});
 		let runProgress = false;
 		for (const pi of currentQueue) {
 			if (usedPatterns.has(pi)) runProgress = true;
@@ -1835,24 +1982,50 @@ work.splice(m.pos, 0, MARKER_LINE);
 }
 }
 
+	if (signal?.aborted && pendingQueue.length > 0) {
+		partialReplaceSnapshot = { newContent: cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n'))), totalApplied };
+		throw new Error('Operation cancelled');
+	}
+
 const newContent = cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n')));
+	// OR-merge: exactly one row per rule; success overrides earlier failures
+	const mergedReports = patterns.map((_, pi) => {
+		const o = patternOutcome.get(pi);
+		if (!o) {
+			return { bestSimilarity: 0, success: false, failureReason: 'Not attempted' };
+		}
+		if (o.success) {
+			return {
+				bestSimilarity: o.bestSimilarity,
+				success: true,
+				originalLineCount: o.totalOriginalLines,
+				replacementLineCount: o.totalReplacementLines,
+				failureReason: null,
+				identicalSkipped: !!o.identicalSkipped,
+				applications: o.applications
+			};
+		}
+		return { bestSimilarity: o.bestSimilarity, success: false, failureReason: o.failureReasons[0] || 'No match', applications: 0 };
+	});
+
 	return {
 		newContent,
 		totalApplied,
-		reports,
+		reports: mergedReports,
 		totalRules: patterns.length,
 		usedCount: usedPatterns.size,
 		patterns,
 		usedPatterns,
 		patternsMatched: usedPatterns.size,
 		runsUsed: runCount,
+		runHistory,
 		skippedRanges: identicalRanges,
 		skippedCount: identicalRanges.length
 	};
 }
 
 // -------------------- ReplaceMode2 (with marker adjustment) (unchanged) --------------------
-async function ReplaceMode2(contentRaw, rules, threshold, greedy, applyMultipleMatches, tolerance, signal, showStatus, updateStats, originalRawRules) {
+async function ReplaceMode2(contentRaw, rules, threshold, greedy, applyMultipleMatches, signal, showStatus, updateStats, originalRawRules) {
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
 const blocks = parseMode2Blocks(norm(rules).split('\n'));
 if (blocks.length === 0) {
@@ -1861,12 +2034,9 @@ return { newContent: contentRaw, totalApplied: 0, reports: [], patternsMatched: 
 }
 
 let work = norm(contentRaw).split('\n');
-let origins = work.map(() => 'original');
 const markers = [];
 let totalApplied = 0;
-let patternsMatched = 0;
 const usedBlocks = new Set();
-const reports = [];
 const shouldShowMarkers = showMarkers && !applyMultipleMatches;
 let globalOffset = 0;
 
@@ -1887,10 +2057,28 @@ m.pos += diff;
 	const minLiteralLines = Math.max(1, matchLinesCount);
 
 const pendingBlocks = blocks.map((_, i) => i);
-const MAX_RETRY_RUNS = 3;
+const runHistory = [];
+const blockOutcome = new Map();
 let runCount = 0;
 let mode2LastYieldTime = performance.now();
-	while (pendingBlocks.length > 0 && runCount < MAX_RETRY_RUNS) {
+
+function recordBlockFailure(bi, reason, bestSim) {
+const o = blockOutcome.get(bi) || { success: false, bestSimilarity: 0, originalLineCount: 0, replacementLineCount: 0, failureReasons: [] };
+o.bestSimilarity = Math.max(o.bestSimilarity, Math.round(bestSim || 0));
+if (!o.success && o.failureReasons.length < 3) o.failureReasons.push(reason);
+blockOutcome.set(bi, o);
+}
+
+function recordBlockSuccess(bi, match, removeCount, addedCount) {
+const o = blockOutcome.get(bi) || { success: false, bestSimilarity: 0, originalLineCount: 0, replacementLineCount: 0, failureReasons: [] };
+o.success = true;
+o.bestSimilarity = Math.max(o.bestSimilarity, Math.round(match.avgSim || 0));
+o.originalLineCount += removeCount;
+o.replacementLineCount += addedCount;
+blockOutcome.set(bi, o);
+}
+
+	while (pendingBlocks.length > 0) {
 		runCount++;
 		const currentBatch = pendingBlocks.splice(0);
 		for (const bi of currentBatch) {
@@ -1900,7 +2088,7 @@ let mode2LastYieldTime = performance.now();
 			const replLines = block.replLines;
 
 			if (searchLines.length === 0) {
-				reports.push({ success: false, failureReason: 'Search lines missing' });
+				recordBlockFailure(bi, 'Search lines missing', 0);
 				continue;
 			}
 
@@ -1937,7 +2125,7 @@ let mode2LastYieldTime = performance.now();
 				scanPositions = anchorStarts.filter(i => i >= 0 && i < work.length);
 				if (scanPositions.length === 0) {
 					if (strict) {
-						reports.push({ success: false, failureReason: 'No strict anchor match' });
+						recordBlockFailure(bi, 'No strict anchor match', 0);
 						continue;
 					}
 					scanPositions = null;
@@ -1951,7 +2139,7 @@ let mode2LastYieldTime = performance.now();
 for (let sIdx = 0; sIdx < totalIter; sIdx++) {
 const i = scanPositions ? scanPositions[sIdx] : sIdx;
 if (performance.now() - mode2LastYieldTime > 30) {
-if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length}`, 'info');
+if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length}`, 'info', true);
 await new Promise(r => setTimeout(r, 0));
 mode2LastYieldTime = performance.now();
 }
@@ -1974,13 +2162,13 @@ let literalMatched = 0;
 						patternIdx = j + 1;
 						continue;
 					}
-					const sim = compareWithTolerance(work[curIdx], searchLine, threshold, 0, false, 0);
-					if (sim < threshold) break;
-					simSum += sim;
-					literalMatched++;
-					lastMatchedPos = curIdx;
-					curIdx++;
-					patternIdx = j + 1;
+const sim = compareWithTolerance(work[curIdx], searchLine, false, 0);
+if (sim < threshold) break;
+simSum += sim;
+literalMatched++;
+lastMatchedPos = curIdx;
+curIdx++;
+patternIdx = j + 1;
 				}
 				if (literalMatched < minLiteralLines) continue;
 				const avgSim = simSum / literalMatched;
@@ -1995,7 +2183,7 @@ let literalMatched = 0;
 			}
 
 			if (candidates.length === 0) {
-				reports.push({ success: false, failureReason: isFirstLineLiteral ? 'No matching signature lines found' : '' });
+				recordBlockFailure(bi, isFirstLineLiteral ? 'No matching signature lines found' : 'No match', 0);
 				continue;
 			}
 
@@ -2033,17 +2221,17 @@ let literalMatched = 0;
 				applyReplacementAndAdjustMarkers(m.insertPos, m.insertPos + removeCount, remaining);
 				totalApplied++;
 				usedBlocks.add(bi);
-				reports.push({
-					bestSimilarity: Math.round(m.avgSim),
-					success: true,
-					originalLineCount: removeCount,
-					replacementLineCount: remaining.length,
-					failureReason: null
-				});
+				recordBlockSuccess(bi, m, removeCount, remaining.length);
 				markIndexDirty();
 			}
 			await new Promise(r => setTimeout(r, 0));
 		}
+		runHistory.push({
+			run: runCount,
+			pendingBefore: currentBatch.length,
+			newlyApplied: currentBatch.filter(bi => usedBlocks.has(bi)).length,
+			pendingAfter: pendingBlocks.length
+		});
 		let runProgress = false;
 		for (const bi of currentBatch) {
 			if (usedBlocks.has(bi)) runProgress = true;
@@ -2069,15 +2257,32 @@ work.splice(m.pos, 0, MARKER_LINE);
 }
 
 const newContent = cleanupWildcardPlaceholders(restoreLiteralEllipsis(work.join('\n')));
+
+const mergedReports = blocks.map((_, bi) => {
+const o = blockOutcome.get(bi);
+if (!o) return { bestSimilarity: 0, success: false, failureReason: 'Not attempted' };
+if (o.success) {
+return {
+bestSimilarity: o.bestSimilarity,
+success: true,
+originalLineCount: o.originalLineCount,
+replacementLineCount: o.replacementLineCount,
+failureReason: null
+};
+}
+return { bestSimilarity: o.bestSimilarity, success: false, failureReason: o.failureReasons[0] || 'No match' };
+});
+
 return {
 newContent,
 totalApplied,
-reports,
+reports: mergedReports,
 patternsMatched: usedBlocks.size,
 totalRules: blocks.length,
 usedCount: usedBlocks.size,
 usedBlocks,
-runsUsed: runCount
+runsUsed: runCount,
+runHistory
 };
 }
 
@@ -2402,7 +2607,7 @@ const lines = norm(raw).split('\n');
 const { allPairs } = parseFenceInfos(lines);
 // Count all fence pairs (not only those with level === 0)
 const totalPairs = allPairs.length;
-const potential = Math.max(0, Math.floor(totalPairs / 2) - patterns.length);
+const potential = Math.floor(totalPairs / 2);
 return { valid: patterns.length, potential };
 }
 
@@ -2435,6 +2640,7 @@ function resetOpStats() {
 lastAppliedCount = 0;
 lastUsedCount = 0;
 if (matchDetails) matchDetails.classList.add('hidden');
+if (greedyConfirmBtn) greedyConfirmBtn.classList.add('hidden');
 }
 
 function getSnapshot() {
@@ -2519,6 +2725,7 @@ updateUndoRedoButtons();
 function bindLiveUpdate() {
 if (contentArea) contentArea.addEventListener('input', () => { resetOpStats(); markIndexDirty(); scheduleInputCommit(); updateStats(); });
 if (patternArea) patternArea.addEventListener('input', () => { resetOpStats(); markIndexDirty(); scheduleInputCommit(); updateStats(); });
+if (parkingArea) parkingArea.addEventListener('input', saveParking);
 if (similarityRange) similarityRange.addEventListener('input', updateStats);
 if (separatorInput) separatorInput.addEventListener('input', updateStats);
 
@@ -2580,8 +2787,9 @@ while (matchReport.firstChild) matchReport.removeChild(matchReport.firstChild);
 const table = document.createElement('table');
 const thead = document.createElement('thead');
 const headerRow = document.createElement('tr');
-['Sim', 'Lines', 'Notes'].forEach(text => {
+['#', 'Sim', 'Lines', 'Notes'].forEach(text => {
 const th = document.createElement('th');
+th.setAttribute('scope', 'col');
 th.textContent = text;
 headerRow.appendChild(th);
 });
@@ -2590,7 +2798,8 @@ table.appendChild(thead);
 
 const tbody = document.createElement('tbody');
 const fragment = document.createDocumentFragment();
-for (const r of reports) {
+for (let ri = 0; ri < reports.length; ri++) {
+const r = reports[ri];
 if (!r) continue;
 const sim = r.bestSimilarity || 0;
 const colorClass = r.success
@@ -2598,6 +2807,10 @@ const colorClass = r.success
 : (sim >= thresholdVal ? 'similarity-amber' : 'similarity-red');
 
 const tr = document.createElement('tr');
+
+const tdNum = document.createElement('td');
+tdNum.textContent = '#' + (ri + 1);
+tr.appendChild(tdNum);
 
 const tdSim = document.createElement('td');
 tdSim.className = colorClass;
@@ -2631,14 +2844,17 @@ table.appendChild(tbody);
 matchReport.appendChild(table);
 }
 
-function showStatus(msg, type) {
+function showStatus(msg, type, persistent = false) {
 if (!statusMsgEl) return;
 statusMsgEl.textContent = msg;
 statusMsgEl.className = 'status-msg ' + type;
-statusMsgEl.classList.remove('hidden');
 
 if (statusTimeout) clearTimeout(statusTimeout);
+if (!persistent) {
 statusTimeout = setTimeout(() => statusMsgEl.classList.add('hidden'), 6000);
+} else {
+statusTimeout = null;
+}
 }
 
 function rebuildMode1RulesComplete(originalRawRules, patterns, usedPatterns, isLocked, skippedRanges) {
@@ -2698,7 +2914,15 @@ function rebuildMode1RulesComplete(originalRawRules, patterns, usedPatterns, isL
 }
 
 // -------------------- Main Replace function --------------------
+let replaceInProgress = false;
+
 async function Replace() {
+if (replaceInProgress) {
+if (abortController) abortController.abort();
+return;
+}
+replaceInProgress = true;
+partialReplaceSnapshot = null;
 flushInputCommit();
 if (abortController) {
 abortController.abort();
@@ -2707,12 +2931,12 @@ abortController = new AbortController();
 const signal = abortController.signal;
 
 if (replaceBtn) {
-replaceBtn.disabled = true;
-replaceBtn.textContent = '⏳ Processing...';
+replaceBtn.textContent = '⏹ Cancel';
 }
 
 if (!contentArea || !patternArea) {
-if (replaceBtn) { replaceBtn.disabled = false; replaceBtn.textContent = currentMode === 1 ? 'Replace All' : 'Append All'; }
+replaceInProgress = false;
+if (replaceBtn) { replaceBtn.textContent = currentMode === 1 ? 'Replace All' : 'Append All'; }
 return;
 }
 
@@ -2739,7 +2963,8 @@ rules = protectLiteralEllipsis(rules);
 
 if (!content.trim() || !rules.trim()) {
 showStatus('⚠️ Both fields must be filled.', 'warning');
-if (replaceBtn) { replaceBtn.disabled = false; replaceBtn.textContent = currentMode === 1 ? 'Replace All' : 'Append All'; }
+replaceInProgress = false;
+if (replaceBtn) { replaceBtn.textContent = currentMode === 1 ? 'Replace All' : 'Append All'; }
 return;
 }
 
@@ -2749,40 +2974,55 @@ const simMode2 = similarityThreshold;
 
 const greedy = greedyEllipsis ? greedyEllipsis.checked : false;
 const applyMultipleMatches = allowAmbiguityToggle ? !allowAmbiguityToggle.checked : true;
-const tolerance = 0;
 
 let reports = [],
 newContent = content,
 totalApplied = 0;
 try {
 let result = null;
+const allOrNone = !!(allOrNoneToggle && allOrNoneToggle.checked);
 if (currentMode === 1) {
-result = await ReplaceMode1(content, rules, simMode1, greedy, applyMultipleMatches, tolerance, originalContent, originalRawRules, signal, showStatus, updateStats);
-newContent = result.newContent;
-totalApplied = result.totalApplied;
-reports = result.reports;
-lastUsedCount = result.usedCount;
-	if (result.patterns || (result.skippedRanges && result.skippedRanges.length > 0)) {
-		rebuildMode1RulesComplete(originalRawRules, result.patterns || [], result.usedPatterns || new Set(), lockedPattern ? lockedPattern.checked : false, result.skippedRanges);
-		updateStats();
-	}
-} else {
-result = await ReplaceMode2(content, rules, simMode2, greedy, applyMultipleMatches, tolerance, signal, showStatus, updateStats, originalRawRules);
+result = await ReplaceMode1(content, rules, simMode1, greedy, applyMultipleMatches, originalContent, originalRawRules, signal, showStatus, updateStats);
 newContent = result.newContent;
 totalApplied = result.totalApplied;
 reports = result.reports;
 lastUsedCount = result.usedCount;
 
-if (!lockedPattern.checked && result.usedBlocks && result.usedBlocks.size) {
+const everyRuleMatched = reports.length > 0 && reports.every(r => r.success);
+if (allOrNone && result.totalRules > 0 && !everyRuleMatched) {
+newContent = originalContent;
+totalApplied = 0;
+lastUsedCount = 0;
+} else if (result.patterns || (result.skippedRanges && result.skippedRanges.length > 0)) {
+rebuildMode1RulesComplete(originalRawRules, result.patterns || [], result.usedPatterns || new Set(), lockedPattern ? lockedPattern.checked : false, result.skippedRanges);
+updateStats();
+}
+} else {
+result = await ReplaceMode2(content, rules, simMode2, greedy, applyMultipleMatches, signal, showStatus, updateStats, originalRawRules);
+newContent = result.newContent;
+totalApplied = result.totalApplied;
+reports = result.reports;
+lastUsedCount = result.usedCount;
+
+const everyBlockMatched = reports.length > 0 && reports.every(r => r.success);
+if (allOrNone && result.totalRules > 0 && !everyBlockMatched) {
+newContent = originalContent;
+totalApplied = 0;
+lastUsedCount = 0;
+} else if (!lockedPattern.checked && result.usedBlocks && result.usedBlocks.size) {
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'));
 const newBlocks = allBlocks.filter((_, idx) => !result.usedBlocks.has(idx));
-patternArea.value = newBlocks.map(b => b.searchLines.concat('', b.replLines).join('\n')).join('\n\n');
+patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join('\n\n');
 updateStats();
 }
 }
 contentArea.value = newContent;
 lastAppliedCount = totalApplied;
 commitSnapshot();
+
+if (autoCopyToggle && autoCopyToggle.checked && totalApplied > 0 && newContent && navigator.clipboard) {
+navigator.clipboard.writeText(newContent).catch(() => {});
+}
 
 updateStats();
 const thresholdVal = similarityThreshold;
@@ -2797,19 +3037,37 @@ if (totalApplied > 0) msg = `✅ ${totalApplied} pattern(s) applied · ${runsUse
 else msg = 'No result';
 if (skippedCount > 0) msg += ` · 🗑️ ${skippedCount} identical pair(s) deleted`;
 showStatus(msg, totalApplied > 0 ? 'info' : 'warning');
+
+if (greedyConfirmBtn) {
+if (totalApplied > 0) {
+greedyConfirmBtn.textContent = `✓ ${totalApplied} match${totalApplied === 1 ? '' : 'es'}`;
+greedyConfirmBtn.classList.remove('hidden');
+} else {
+greedyConfirmBtn.classList.add('hidden');
+}
+}
 } catch (err) {
 console.error(err);
 if (err.message === 'Operation cancelled') {
+if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0) {
+contentArea.value = partialReplaceSnapshot.newContent;
+lastAppliedCount = partialReplaceSnapshot.totalApplied;
+commitSnapshot();
+updateStats();
+}
 showStatus('⏹️ Operation cancelled.', 'warning');
 } else {
 showStatus('❌ Error: ' + (err.message || err), 'warning');
 }
 } finally {
+replaceInProgress = false;
 if (replaceBtn) {
-replaceBtn.disabled = false;
 replaceBtn.textContent = currentMode === 1 ? 'Replace All' : 'Append All';
 }
 abortController = null;
+if (statusTimeout === null && statusMsgEl && !statusMsgEl.classList.contains('hidden')) {
+statusTimeout = setTimeout(() => statusMsgEl.classList.add('hidden'), 6000);
+}
 }
 }
 
@@ -2905,16 +3163,15 @@ if (contentArea) contentArea.value = '';
 if (patternArea) patternArea.value = '';
 
 if (ellipsisWildcard) ellipsisWildcard.checked = true;
-if (greedyEllipsis) greedyEllipsis.checked = true;
+if (greedyEllipsis) greedyEllipsis.checked = false;
 if (lineWildcard) lineWildcard.checked = false;
 if (allowAmbiguityToggle) allowAmbiguityToggle.checked = true;
 if (organizeModeToggle) organizeModeToggle.checked = false;
 if (interpretEscapesToggle) interpretEscapesToggle.checked = false;
 if (lockedPattern) lockedPattern.checked = false;
 if (showMarkersToggle) showMarkersToggle.checked = false;
+if (autoCopyToggle) autoCopyToggle.checked = false;
 if (similarityRange) similarityRange.value = 80;
-if (mode2Sim) mode2Sim.value = 80;
-if (mode2Tolerance) mode2Tolerance.value = 0;
 
 if (mode2Threshold) mode2Threshold.value = 2;
 if (separatorInput) separatorInput.value = 'replace';
@@ -2923,7 +3180,8 @@ ellipsisWildcardEnabled = true;
 lineWildcardEnabled = false;
 showMarkers = false;
 currentMode = 1;
-modeTabs.forEach(t => t.classList.remove('active'));
+const modeTabsReset = document.querySelectorAll('.mode-tab');
+modeTabsReset.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
 const firstTab = document.querySelector('.mode-tab[data-mode="1"]');
 if (firstTab) firstTab.classList.add('active');
 if (mode1Controls) mode1Controls.classList.remove('hidden');
@@ -2948,8 +3206,7 @@ updateStats();
 }
 
 if (resetBtn) {
-resetBtn.addEventListener('click', (e) => {
-e.stopPropagation();
+resetBtn.addEventListener('click', () => {
 openResetPopper();
 });
 }
@@ -2977,8 +3234,20 @@ const tmp = contentArea.value;
 contentArea.value = patternArea.value;
 patternArea.value = tmp;
 }
+markIndexDirty();
 resetOpStats();
+commitSnapshot();
 updateStats();
+});
+}
+
+if (greedyConfirmBtn) {
+greedyConfirmBtn.addEventListener('click', (e) => {
+e.stopPropagation();
+if (greedyEllipsis && !greedyEllipsis.checked) {
+greedyEllipsis.checked = true;
+}
+Replace();
 });
 }
 
@@ -3001,12 +3270,14 @@ abortController = null;
 
 bindLiveUpdate();
 updateWildcardDependencies();
+setModeHint('Mode 1: Search block must match; replacement lines are applied in order.');
+if (replaceBtn) replaceBtn.textContent = 'Replace All';
+loadParking();
 updateStats();
 lastSnapshot = getSnapshot();
 updateUndoRedoButtons();
 }
 
-// Start when DOM is ready
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
 init();
 } else {
