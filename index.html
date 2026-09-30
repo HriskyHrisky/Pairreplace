@@ -213,8 +213,8 @@ Mode 2 · Block matching
 <hr>
 <div class="textarea-grid" style="grid-template-columns: 1fr; margin-top: 0; margin-bottom: 14px;">
 <div class="textarea-box">
-<label for="parkingArea">Parking (scratch — not affected by undo/redo, Reset, Replace All, or Swap · auto-saved to browser)</label>
-<textarea id="parkingArea" placeholder="Scratch space — auto-saved to localStorage, not tracked by undo/redo/Reset" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+<label for="parkingArea">Parking (scratch — not affected by undo/redo, Replace All, or Swap)</label>
+<textarea id="parkingArea" placeholder="Scratch space — saved manually via browser, not tracked by this app" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 </div>
 </div>
 </div>
@@ -232,6 +232,8 @@ const contentCharCount = document.getElementById('contentCharCount');
 const contentLineBadge = document.getElementById('contentLineBadge');
 const patternCharCount = document.getElementById('patternCharCount');
 const patternLineBadge = document.getElementById('patternLineBadge');
+const parkingCharCount = document.getElementById('parkingCharCount');
+const parkingLineBadge = document.getElementById('parkingLineBadge');
 const patternValid = document.getElementById('patternValid');
 const patternPotential = document.getElementById('patternPotential');
 const mode1Stats = document.getElementById('mode1Stats');
@@ -282,7 +284,7 @@ let statusTimeout = null;
 
 const undoStack = [];
 const redoStack = [];
-const MAX_UNDO_STACK = 50;
+const MAX_UNDO_STACK = 100;
 let lastSnapshot = null;
 let inputCommitTimer = null;
 let partialReplaceSnapshot = null;
@@ -296,22 +298,6 @@ const LITERAL_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'LTD';
 const WILDCARD_ELLIPSIS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WEL';
 const WILDCARD_THREE_DOTS_PLACEHOLDER = PLACEHOLDER_PREFIX + 'WTD';
 const MARKER_LINE = '// ‼️';
-
-// -------------------- Parking (local save only) --------------------
-const PARKING_STORAGE_KEY = 'textReplacementParking_v1';
-
-function saveParking() {
-try {
-if (parkingArea) localStorage.setItem(PARKING_STORAGE_KEY, parkingArea.value);
-} catch (e) { /* ignore quota / private mode */ }
-}
-
-function loadParking() {
-try {
-const v = localStorage.getItem(PARKING_STORAGE_KEY);
-if (v !== null && parkingArea) parkingArea.value = v;
-} catch (e) { /* ignore */ }
-}
 
 // -------------------- Utility functions (unchanged) --------------------
 function stripInvisibleChars(s) {
@@ -545,7 +531,7 @@ const other = bgB.get(g) || 0;
 common += Math.min(c, other);
 }
 for (const [, c] of bgB) totalB += c;
-const dice = (totalA + totalB) > 0 ? (2 * common) / (totalA + totalB) : 0;
+const dice = (totalA + totalB) > 0 ? (2 * common) / (totalA + totalB) : 1;
 
 // Blend with full length ratio so "abc…xyz" vs "abcXYZ" doesn't over-score
 const lenRatio = Math.min(normA.length, normB.length) / Math.max(normA.length, normB.length);
@@ -2329,17 +2315,31 @@ function parseMode1Pattern(rules, sep) {
 
 			i++; // move past closing search fence
 
-			const sepIdx = lines.findIndex(
+			let sepIdx = lines.findIndex(
 				(line, idx) => idx >= i && line.toLowerCase().includes(sep.toLowerCase())
 			);
-			if (sepIdx === -1) break;
 
-			let replOpen = sepIdx + 1;
-			while (replOpen < lines.length && lines[replOpen].trim() === '') {
-				replOpen++;
-			}
-			if (replOpen >= lines.length || !lines[replOpen].trim().startsWith('```')) {
-				break;
+			let replOpen = -1;
+			if (sepIdx !== -1) {
+				replOpen = sepIdx + 1;
+				while (replOpen < lines.length && lines[replOpen].trim() === '') {
+					replOpen++;
+				}
+				if (replOpen >= lines.length || !lines[replOpen].trim().startsWith('```')) {
+					break;
+				}
+			} else {
+				// No separator line found: allow two adjacent fenced blocks
+				// (search fence, then blank(s), then replacement fence).
+				let next = i;
+				while (next < lines.length && lines[next].trim() === '') {
+					next++;
+				}
+				if (next < lines.length && lines[next].trim().startsWith('```')) {
+					replOpen = next;
+				} else {
+					break;
+				}
 			}
 
 			const replLines = [];
@@ -2554,12 +2554,15 @@ if (version !== statsVersion) return;
 if (!contentArea || !patternArea) return;
 
 const content = contentArea.value,
-rules = patternArea.value;
+rules = patternArea.value,
+parking = parkingArea ? parkingArea.value : '';
 
 if (contentCharCount) contentCharCount.textContent = content.length + ' chars';
 if (contentLineBadge) contentLineBadge.textContent = content.split('\n').length + ' lines';
 if (patternCharCount) patternCharCount.textContent = rules.length + ' chars';
 if (patternLineBadge) patternLineBadge.textContent = rules.split('\n').length + ' lines';
+if (parkingCharCount) parkingCharCount.textContent = parking.length + ' chars';
+if (parkingLineBadge) parkingLineBadge.textContent = parking.split('\n').length + ' lines';
 if (appliedCountSpan) appliedCountSpan.textContent = lastAppliedCount;
 if (similarityVal && similarityRange) similarityVal.textContent = similarityRange.value + '%';
 
@@ -2605,10 +2608,11 @@ function analyseMode1(raw, sep) {
 const patterns = parseMode1Pattern(raw, sep) || [];
 const lines = norm(raw).split('\n');
 const { allPairs } = parseFenceInfos(lines);
-// Count all fence pairs (not only those with level === 0)
 const totalPairs = allPairs.length;
-const potential = Math.floor(totalPairs / 2);
-return { valid: patterns.length, potential };
+const total = Math.floor(totalPairs / 2);
+const valid = patterns.length;
+const potential = Math.max(0, total - valid);
+return { valid, potential };
 }
 
 function clearCaches() {
@@ -2725,7 +2729,7 @@ updateUndoRedoButtons();
 function bindLiveUpdate() {
 if (contentArea) contentArea.addEventListener('input', () => { resetOpStats(); markIndexDirty(); scheduleInputCommit(); updateStats(); });
 if (patternArea) patternArea.addEventListener('input', () => { resetOpStats(); markIndexDirty(); scheduleInputCommit(); updateStats(); });
-if (parkingArea) parkingArea.addEventListener('input', saveParking);
+if (parkingArea) parkingArea.addEventListener('input', () => { scheduleSaveState(); updateStats(); });
 if (similarityRange) similarityRange.addEventListener('input', updateStats);
 if (separatorInput) separatorInput.addEventListener('input', updateStats);
 
@@ -3161,6 +3165,7 @@ abortController = null;
 }
 if (contentArea) contentArea.value = '';
 if (patternArea) patternArea.value = '';
+if (parkingArea) parkingArea.value = '';
 
 if (ellipsisWildcard) ellipsisWildcard.checked = true;
 if (greedyEllipsis) greedyEllipsis.checked = false;
@@ -3272,7 +3277,6 @@ bindLiveUpdate();
 updateWildcardDependencies();
 setModeHint('Mode 1: Search block must match; replacement lines are applied in order.');
 if (replaceBtn) replaceBtn.textContent = 'Replace All';
-loadParking();
 updateStats();
 lastSnapshot = getSnapshot();
 updateUndoRedoButtons();
