@@ -2277,7 +2277,7 @@ if (i >= lines.length) break;
 i++; // move past closing search fence
 
 const sepIdx = lines.findIndex(
-(line, idx) => idx >= i && line.trim().toLowerCase() === sep.toLowerCase()
+(line, idx) => idx >= i && line.trim().toLowerCase().includes(sep.toLowerCase())
 );
 if (sepIdx === -1) break;
 
@@ -2520,10 +2520,9 @@ if (usedRulesSpan) usedRulesSpan.textContent = Math.max(0, lastAppliedCount - la
 
 function analyseMode1(raw, sep) {
 const patterns = parseMode1Pattern(raw, sep) || [];
-const completePairs = Math.floor(parseFenceInfos(norm(raw).split('\n')).allPairs.length / 2);
 return {
 valid: patterns.length,
-potential: Math.max(0, completePairs - patterns.length)
+potential: Math.max(0, parseFenceInfos(norm(raw).split('\n')).allPairs.length / 2 - patterns.length)
 };
 }
 
