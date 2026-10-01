@@ -244,6 +244,7 @@ const mode2Controls = document.getElementById('mode2Controls');
 const modeStatusBadge = document.getElementById('modeStatusBadge');
 const modeHintText = document.getElementById('modeHintText');
 const mode2Threshold = document.getElementById('mode2Threshold');
+const mode2SeparatorInput = document.getElementById('mode2SeparatorInput');
 const separatorInput = document.getElementById('separatorInput');
 const replaceBtn = document.getElementById('replaceBtn');
 const resetBtn = document.getElementById('resetBtn');
@@ -1867,9 +1868,9 @@ skippedCount: identicalRanges.length
 
 async function ReplaceMode2(contentRaw, rules, threshold, greedy, applyMultipleMatches, signal, showStatus, updateStats, originalRawRules) {
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
-const blocks = parseMode2Blocks(norm(rules).split('\n'));
+const blocks = parseMode2Blocks(norm(rules).split('\n'), mode2SeparatorInput ? mode2SeparatorInput.value : '%%%');
 if (blocks.length === 0) {
-if (showStatus) showStatus('No valid blocks found. Use blank line to separate search and replacement.', 'warning');
+if (showStatus) showStatus('No valid blocks found. Use separator or blank line to separate blocks.', 'warning');
 return { newContent: contentRaw, totalApplied: 0, reports: [], patternsMatched: 0, totalRules: 0, usedCount: 0, usedBlocks: new Set() };
 }
 
@@ -2234,8 +2235,27 @@ runHistory
 };
 }
 
-function parseMode2Blocks(lines) {
+function parseMode2Blocks(lines, separator) {
 const blocks = [];
+const sep = (separator === undefined || separator === null) ? '%%%' : String(separator).trim();
+if (sep.length > 0) {
+let current = [];
+for (let i = 0; i < lines.length; i++) {
+if (lines[i].trim() === sep) {
+if (current.length > 0) {
+const searchLines = current.map(l => stripInvisibleChars(l));
+if (searchLines.length > 0) blocks.push({ searchLines, replLines: [] });
+current = [];
+}
+} else {
+current.push(lines[i]);
+}
+}
+if (current.length > 0) {
+const searchLines = current.map(l => stripInvisibleChars(l));
+if (searchLines.length > 0) blocks.push({ searchLines, replLines: [] });
+}
+} else {
 let i = 0;
 while (i < lines.length) {
 while (i < lines.length && lines[i] === '') i++;
@@ -2251,6 +2271,7 @@ if (blockLines.length === 0) continue;
 const searchLines = blockLines.map(l => stripInvisibleChars(l));
 if (searchLines.length === 0) continue;
 blocks.push({ searchLines, replLines: [] });
+}
 }
 return blocks;
 }
@@ -2503,9 +2524,10 @@ totalRules = valid;
 if (mode1Stats) mode1Stats.classList.add('hidden');
 
 const thresh = parseInt((mode2Threshold && mode2Threshold.value) || 2, 10);
-const cacheKey = `${currentMode}:${rules}:${thresh}`;
+const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value : '%%%';
+const cacheKey = `${currentMode}:${rules}:${thresh}:${sepVal}`;
 if (cachedMode2Stats.cacheKey !== cacheKey) {
-const blocks = parseMode2Blocks(norm(rules).split('\n'));
+const blocks = parseMode2Blocks(norm(rules).split('\n'), sepVal);
 cachedMode2Stats = { cacheKey, result: blocks.length };
 }
 const blockCount = cachedMode2Stats.result;
@@ -2647,6 +2669,7 @@ if (similarityRange) similarityRange.addEventListener('input', updateStats);
 if (separatorInput) separatorInput.addEventListener('input', updateStats);
 
 if (mode2Threshold) mode2Threshold.addEventListener('input', updateStats);
+if (mode2SeparatorInput) mode2SeparatorInput.addEventListener('input', updateStats);
 if (lockedPattern) lockedPattern.addEventListener('change', updateStats);
 if (greedyEllipsis) greedyEllipsis.addEventListener('change', updateStats);
 if (ellipsisWildcard) {
@@ -2919,9 +2942,11 @@ newContent = originalContent;
 totalApplied = 0;
 lastUsedCount = 0;
 } else if (!lockedPattern.checked && result.usedBlocks && result.usedBlocks.size) {
-const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'));
+const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value.trim() : '%%%';
+const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
 const newBlocks = allBlocks.filter((_, idx) => !result.usedBlocks.has(idx));
-patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join('\n\n');
+const joiner = sepVal.length > 0 ? ('\n' + sepVal + '\n') : '\n\n';
+patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join(joiner);
 updateStats();
 }
 }
@@ -2965,9 +2990,11 @@ partialReplaceSnapshot.skippedRanges
 );
 updateStats();
 } else if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0 && currentMode === 2 && partialReplaceSnapshot.usedBlocks) {
-const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'));
+const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value.trim() : '%%%';
+const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
 const newBlocks = allBlocks.filter((_, idx) => !partialReplaceSnapshot.usedBlocks.has(idx));
-patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join('\n\n');
+const joiner = sepVal.length > 0 ? ('\n' + sepVal + '\n') : '\n\n';
+patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join(joiner);
 updateStats();
 }
 showStatus('⏹️ Operation cancelled.', 'warning');
@@ -3092,6 +3119,7 @@ if (autoCopyToggle) autoCopyToggle.checked = false;
 if (similarityRange) similarityRange.value = 80;
 
 if (mode2Threshold) mode2Threshold.value = 2;
+if (mode2SeparatorInput) mode2SeparatorInput.value = '%%%';
 if (separatorInput) separatorInput.value = 'replace';
 
 ellipsisWildcardEnabled = true;
