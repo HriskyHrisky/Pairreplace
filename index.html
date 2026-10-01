@@ -2544,7 +2544,7 @@ function analyseMode1(raw, sep) {
 const patterns = parseMode1Pattern(raw, sep) || [];
 return {
 valid: patterns.length,
-potential: Math.max(0, parseFenceInfos(norm(raw).split('\n')).allPairs.length / 2 - patterns.length)
+potential: Math.max(0, Math.floor(parseFenceInfos(norm(raw).split('\n')).allPairs.length / 2 - patterns.length))
 };
 }
 
