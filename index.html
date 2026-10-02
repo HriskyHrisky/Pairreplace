@@ -110,6 +110,12 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <input type="checkbox" id="lineWildcard" title="If ON, any line that contains … is treated as a whole‑line wildcard, capturing the entire content line." />
 <label for="lineWildcard">Full‑line wildcard</label>
 </div>
+<div class="toggle-wrap child-toggle" id="wildcardAnchorWrap">
+<label for="wildcardAnchorMin" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:500;">
+<span>Anchor min chars:</span>
+<input type="number" id="wildcardAnchorMin" value="1" min="1" max="99" style="width:56px;padding:2px 6px;border:1.5px solid #d1d9e6;font-size:13px;font-family:'JetBrains Mono',monospace;" aria-label="Minimum chars for a wildcard anchor line" />
+</label>
+</div>
 </div>
 
 <div class="toggle-group">
@@ -127,16 +133,16 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <label for="organizeModeToggle" title="Enforces stricter matching thresholds to prevent wildcard bleed.">Organize mode (strict anchor matching)</label>
 </div>
 <div class="toggle-wrap" style="margin-top: 8px;">
-<input type="checkbox" id="allOrNoneToggle" title="If ON, no changes are applied unless every rule matches." />
-<label for="allOrNoneToggle">All or none</label>
-</div>
-<div class="toggle-wrap" style="margin-top: 8px;">
 <input type="checkbox" id="interpretEscapesToggle" />
 <label for="interpretEscapesToggle">Interpret \n, \t, \r as control chars</label>
 </div>
 <div class="toggle-wrap" style="margin-top: 8px;">
 <input type="checkbox" id="showMarkersToggle" />
 <label for="showMarkersToggle">Show markers for ambiguity</label>
+</div>
+<div class="toggle-wrap" style="margin-top: 8px;" id="replaceUnmatchedWrap">
+<input type="checkbox" id="replaceUnmatchedLinesToggle" />
+<label for="replaceUnmatchedLinesToggle" title="Mode 2 only: When ON, wildcards scan forward and consume/replace any unmatched lines in the matched range until the next exact anchor line (≥ N chars). When OFF, wildcards match a single line and the remaining pattern lines replace the following lines.">Replace unmatched lines (Mode 2)</label>
 </div>
 </div>
 </div>
@@ -160,7 +166,7 @@ Mode 2 · Block matching
 <label for="patternArea">Rules (textarea 2)
 <span class="pattern-extras"><span class="count" id="patternCharCount">0 chars</span><span class="pattern-line-badge" id="patternLineBadge">0 lines</span></span>
 </label>
-<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated by empty lines (first k non-empty lines = signature, rest = replacement)" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated (first k non-empty lines = signature, rest = replacement)" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 <div class="stats-row">
 <span class="stat-badge">✅: <span id="appliedCount">0</span></span>
 <span class="stat-badge" title="Actual Applied − Unique patterns (greater than 0 only when Apply once is OFF)">Ambiguity: <span id="usedRules">0</span></span>
@@ -170,9 +176,10 @@ Mode 2 · Block matching
 </div>
 </div>
 <div id="mode1Controls" class="mode-controls">
-<div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace" /></label></div>
+<div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace" placeholder="(empty = consecutive fence pairs)" /></label></div>
 </div>
 <div id="mode2Controls" class="mode-controls hidden">
+<div class="group"><label>Separator: <input type="text" id="mode2SeparatorInput" value="%%%" /></label></div>
 <div class="group"><label>Min matched lines: <input type="number" id="mode2Threshold" value="2" min="1" max="20" aria-label="Minimum matched lines for Mode 2" /></label></div>
 </div>
 <div class="mode-hint" id="modeHint">
@@ -199,7 +206,6 @@ Mode 2 · Block matching
 <h3 style="font-weight:600; margin:0 0 6px 0; font-size:14px;">Match report</h3>
 <div id="matchReport"></div>
 </div>
-<div class="footer-hint"><span><strong>…</strong> and <strong>...</strong> are treated as wildcards. Greediness is controlled by the <strong>Longest match first</strong> toggle.</span></div>
 <div id="resetPopper" class="popper" role="dialog" aria-labelledby="resetPopperTitle">
 <div class="popper-arrow"></div>
 <div class="popper-title" id="resetPopperTitle">Reset everything?</div>
@@ -212,13 +218,12 @@ Mode 2 · Block matching
 <hr>
 <div class="textarea-grid" style="grid-template-columns: 1fr; margin-top: 0; margin-bottom: 14px;">
 <div class="textarea-box">
-<label for="parkingArea">Parking (scratch — not affected by undo/redo, Replace All, or Swap)</label>
-<textarea id="parkingArea" placeholder="Scratch space — saved manually via browser, not tracked by this app" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+<label for="parkingArea">Parking</label>
+<textarea id="parkingArea" placeholder="Saved manually via browser, not tracked or affected by any button" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 </div>
 </div>
 </div>
 <script>
-// jshint esversion: 11
 const contentArea = document.getElementById('contentArea');
 const patternArea = document.getElementById('patternArea');
 const parkingArea = document.getElementById('parkingArea');
@@ -257,7 +262,6 @@ const matchReport = document.getElementById('matchReport');
 const greedyEllipsisWrap = document.getElementById('greedyEllipsisWrap');
 const lineWildcardWrap = document.getElementById('lineWildcardWrap');
 const allowAmbiguityToggle = document.getElementById('allowAmbiguityToggle');
-const allOrNoneToggle = document.getElementById('allOrNoneToggle');
 const interpretEscapesToggle = document.getElementById('interpretEscapesToggle');
 const organizeModeToggle = document.getElementById('organizeModeToggle');
 const showMarkersToggle = document.getElementById('showMarkersToggle');
@@ -265,6 +269,8 @@ const resetPopper = document.getElementById('resetPopper');
 const resetPopperOk = document.getElementById('resetPopperOk');
 const resetPopperCancel = document.getElementById('resetPopperCancel');
 const autoCopyToggle = document.getElementById('autoCopyToggle');
+const replaceUnmatchedLinesToggle = document.getElementById('replaceUnmatchedLinesToggle');
+const wildcardAnchorMin = document.getElementById('wildcardAnchorMin');
 
 
 let currentMode = 1;
@@ -1513,6 +1519,7 @@ const unmatchedDeferred = () => unmatched().filter(pi => isFencePattern(patterns
 
 async function tryPattern(pi, strategy, windows) {
 abortIfCancelled();
+if (usedPatterns.has(pi)) return false;
 const pat = patterns[pi];
 const searchLines = pat.searchLines;
 const replLines = pat.replLines;
@@ -1676,6 +1683,9 @@ markers.push({ pos: cand.start + globalOffset, kind: 'ambiguity', end: cand.end 
 } else {
 allCandidates.sort((a, b) => {
 if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
+const lenA = a.end - a.start;
+const lenB = b.end - b.start;
+if (lenB !== lenA) return lenB - lenA;
 return a.start - b.start;
 });
 const maxScore = allCandidates[0].avgSim;
@@ -1744,19 +1754,14 @@ markIndexDirty();
 return true;
 }
 
-let exactPass = 0;
-let exactChanged = true;
 const MAX_STAGE_PASSES = 50;
-while (exactChanged) {
-exactChanged = false;
-exactPass++;
-if (exactPass > MAX_STAGE_PASSES) break;
-for (const pi of unmatchedNow()) {
-if (await tryPattern(pi, 'exact', null)) exactChanged = true;
-}
-abortIfCancelled();
-}
-runHistory.push({ stage: 'exact', passes: exactPass });
+const STAGE_ORDER = ['exact', 'word', 'ngram'];
+let outerPass = 0;
+let outerChanged = true;
+
+while (outerChanged && outerPass < MAX_STAGE_PASSES) {
+outerChanged = false;
+outerPass++;
 
 const windowsByPattern = new Map();
 for (const pi of unmatchedNow()) {
@@ -1767,15 +1772,24 @@ if (wins.length > 0) windowsByPattern.set(pi, wins);
 else recordFailure(pi, 'Gate: no exact bookend pair', 0);
 }
 
-for (const strategy of ['word', 'ngram']) {
+for (const strategy of STAGE_ORDER) {
+let attempted = 0;
 let appliedThisStage = 0;
 for (const pi of unmatchedNow()) {
-const wins = windowsByPattern.get(pi);
+let wins = null;
+if (strategy !== 'exact') {
+wins = windowsByPattern.get(pi);
 if (!wins || wins.length === 0) continue;
+}
+attempted++;
 if (await tryPattern(pi, strategy, wins)) appliedThisStage++;
 }
-runHistory.push({ stage: strategy, applied: appliedThisStage });
-await new Promise(r => setTimeout(r, 0));
+if (attempted > 0) runHistory.push({ stage: strategy, applied: appliedThisStage });
+if (appliedThisStage > 0) { outerChanged = true; break; }
+abortIfCancelled();
+}
+if (unmatchedNow().length === 0) break;
+if (outerChanged) await new Promise(r => setTimeout(r, 0));
 }
 
 if (unmatchedDeferred().length > 0) {
@@ -1962,6 +1976,7 @@ const unmatchedBlocksDeferred = () => unmatchedBlocks().filter(bi => isFenceBloc
 
 async function tryBlock(bi, strategy, windows) {
 abortIfCancelled();
+if (usedBlocks.has(bi)) return false;
 const block = blocks[bi];
 const searchLines = block.searchLines;
 const replLines = block.replLines;
@@ -1976,6 +1991,15 @@ return false;
 
 if (searchLines.length === 0) {
 recordBlockFailure(bi, 'Search lines missing', 0);
+return false;
+}
+
+const literalOnlyLines = searchLines.filter(l => {
+const t = (l || '').trim();
+return t !== '' && t !== '…' && t !== '...' && t !== WILDCARD_ELLIPSIS_PLACEHOLDER && t !== WILDCARD_THREE_DOTS_PLACEHOLDER;
+});
+if (literalOnlyLines.length < minLiteralLines) {
+recordBlockFailure(bi, `Block has fewer than ${minLiteralLines} literal lines`, 0);
 return false;
 }
 
@@ -2011,38 +2035,98 @@ if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length} · ${strategy}
 await new Promise(r => setTimeout(r, 0));
 mode2LastYieldTime = performance.now();
 }
-let literalMatched = 0;
-let simSum = 0;
-let curIdx = i;
-let lastMatchedPos = i - 1;
-let patternIdx = 0;
-for (let j = 0; j < searchLines.length && curIdx < work.length; j++) {
-const searchLine = searchLines[j];
-const trimmed = (searchLine || '').trim();
-const isWildcardLine =
-trimmed === '…' ||
-trimmed === '...' ||
-trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER ||
-trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER;
-if (isWildcardLine) {
-lastMatchedPos = curIdx;
-curIdx++;
-patternIdx = j + 1;
-continue;
-}
-const sim = (strategy === 'exact')
-? (collapseWS(work[curIdx]) === collapseWS(searchLine) ? 100 : 0)
-: compareWithTolerance(work[curIdx], searchLine, false, 0);
-if (sim < stageThreshold) break;
-simSum += sim;
-literalMatched++;
-lastMatchedPos = curIdx;
-curIdx++;
-patternIdx = j + 1;
-}
-if (literalMatched < minLiteralLines) continue;
-const avgSim = simSum / literalMatched;
-if (avgSim < stageThreshold) continue;
+        const wildcardAnchorN = Math.max(1, parseInt((wildcardAnchorMin && wildcardAnchorMin.value) || 4, 10) || 4);
+        const replaceUnmatched = !!(replaceUnmatchedLinesToggle && replaceUnmatchedLinesToggle.checked);
+        let literalMatched = 0;
+        let matchedLines = 0;
+        let simSum = 0;
+        let curIdx = i;
+        let lastMatchedPos = i - 1;
+        let patternIdx = 0;
+        for (let j = 0; j < searchLines.length && curIdx < work.length; j++) {
+            const searchLine = searchLines[j];
+            const trimmed = (searchLine || '').trim();
+            const isWildcardLine =
+                trimmed === '…' ||
+                trimmed === '...' ||
+                trimmed === WILDCARD_ELLIPSIS_PLACEHOLDER ||
+                trimmed === WILDCARD_THREE_DOTS_PLACEHOLDER;
+            if (isWildcardLine) {
+                if (replaceUnmatched) {
+                    let nlj = j + 1;
+                    while (nlj < searchLines.length) {
+                        const t = (searchLines[nlj] || '').trim();
+                        if (t === '…' || t === '...' || t === WILDCARD_ELLIPSIS_PLACEHOLDER || t === WILDCARD_THREE_DOTS_PLACEHOLDER) nlj++;
+                        else break;
+                    }
+                    if (nlj >= searchLines.length) {
+                        lastMatchedPos = work.length - 1;
+                        curIdx = work.length;
+                        patternIdx = searchLines.length;
+                        matchedLines++;
+                        break;
+                    }
+                    const nextLit = searchLines[nlj];
+                    const nextLitWS = collapseWS(nextLit);
+                    let scanIdx = curIdx;
+                    let foundScan = false;
+                    while (scanIdx < work.length) {
+                        const candRaw = work[scanIdx] || '';
+                        const candTrimmed = candRaw.trim();
+                        const exactEq = collapseWS(candRaw) === nextLitWS;
+                        if (exactEq && (wildcardAnchorN <= 1 || candTrimmed.length >= wildcardAnchorN)) {
+                            foundScan = true;
+                            break;
+                        }
+                        scanIdx++;
+                    }
+                    if (!foundScan) {
+                        let relaxedScan = -1;
+                        for (let rIdx = curIdx; rIdx < work.length; rIdx++) {
+                            const candRaw = work[rIdx] || '';
+                            if (collapseWS(candRaw) === nextLitWS) {
+                                relaxedScan = rIdx;
+                                break;
+                            }
+                        }
+                        if (relaxedScan !== -1) {
+                            scanIdx = relaxedScan;
+                            foundScan = true;
+                        } else {
+                            matchedLines++;
+                            lastMatchedPos = curIdx;
+                            curIdx++;
+                            patternIdx = j + 1;
+                            continue;
+                        }
+                    }
+                    lastMatchedPos = scanIdx - 1;
+                    curIdx = scanIdx;
+                    patternIdx = j + 1;
+                    matchedLines++;
+                    j = nlj - 1;
+                    continue;
+                }
+                matchedLines++;
+                lastMatchedPos = curIdx;
+                curIdx++;
+                patternIdx = j + 1;
+                continue;
+            }
+            const sim = (strategy === 'exact')
+                ? (collapseWS(work[curIdx]) === collapseWS(searchLine) ? 100 : 0)
+                : compareWithTolerance(work[curIdx], searchLine, false, 0);
+            if (sim < stageThreshold) break;
+            simSum += sim;
+            literalMatched++;
+            matchedLines++;
+            lastMatchedPos = curIdx;
+            curIdx++;
+            patternIdx = j + 1;
+        }
+        if (matchedLines < minLiteralLines) continue;
+        const avgSim = literalMatched > 0 ? simSum / literalMatched : 100;
+        if (avgSim < stageThreshold) continue;
 candidates.push({
 startIdx: i,
 insertPos: lastMatchedPos + 1,
@@ -2096,56 +2180,75 @@ markers.push({ pos: c.startIdx + globalOffset, kind: 'ambiguity' });
 }
 
 toApply.sort((a, b) => b.insertPos - a.insertPos);
+const doReplaceUnmatched = !!(replaceUnmatchedLinesToggle && replaceUnmatchedLinesToggle.checked);
 for (const m of toApply) {
 const remaining = (m.remainingPatternLines || []).slice();
-const removeCount = Math.min(remaining.length, Math.max(0, work.length - m.insertPos));
-applyReplacementAndAdjustMarkers(m.insertPos, m.insertPos + removeCount, remaining);
+if (remaining.length === 0) {
 totalApplied++;
 usedBlocks.add(bi);
+recordBlockSuccess(bi, m, 0, 0);
+continue;
+}
+if (doReplaceUnmatched) {
+const removeCount = Math.min(remaining.length, Math.max(0, work.length - m.insertPos));
+applyReplacementAndAdjustMarkers(m.insertPos, m.insertPos + removeCount, remaining);
 recordBlockSuccess(bi, m, removeCount, remaining.length);
+} else {
+work.splice(m.insertPos, 0, ...remaining);
+for (const mk of markers) {
+if (mk.pos >= m.insertPos) mk.pos += remaining.length;
+}
+globalOffset += remaining.length;
+recordBlockSuccess(bi, m, 0, remaining.length);
+}
+totalApplied++;
+usedBlocks.add(bi);
 markIndexDirty();
 }
 await new Promise(r => setTimeout(r, 0));
 return true;
 }
 
-let exactPass = 0;
-let exactChanged = true;
 const MAX_STAGE_PASSES = 50;
-while (exactChanged) {
-exactChanged = false;
-exactPass++;
-if (exactPass > MAX_STAGE_PASSES) break;
-for (const bi of unmatchedBlocksNow()) {
-if (await tryBlock(bi, 'exact', null)) exactChanged = true;
-}
-abortIfCancelled();
-}
-runHistory.push({ stage: 'exact', passes: exactPass });
+const STAGE_ORDER = ['exact', 'word', 'ngram'];
+let outerPass = 0;
+let outerChanged = true;
+
+while (outerChanged && outerPass < MAX_STAGE_PASSES) {
+outerChanged = false;
+outerPass++;
 
 const windowsByBlock = new Map();
-	for (const bi of unmatchedBlocksNow()) {
-		const searchLines = blocks[bi].searchLines;
-		const nonEmpty = searchLines.map(l => l.trim()).filter(l => l.length > 0);
-		const wins = findBookendWindows(work, {
-			firstLines: nonEmpty,
-			lastLines: nonEmpty.slice().reverse(),
-			firstLine: nonEmpty[0] || '',
-			lastLine: nonEmpty[nonEmpty.length - 1] || ''
-		});
-		if (wins.length > 0) windowsByBlock.set(bi, wins);
-		else recordBlockFailure(bi, 'Gate: no exact bookend pair', 0);
-	}
+for (const bi of unmatchedBlocksNow()) {
+const searchLines = blocks[bi].searchLines;
+const nonEmpty = searchLines.map(l => l.trim()).filter(l => l.length > 0);
+const wins = findBookendWindows(work, {
+firstLines: nonEmpty,
+lastLines: nonEmpty.slice().reverse(),
+firstLine: nonEmpty[0] || '',
+lastLine: nonEmpty[nonEmpty.length - 1] || ''
+});
+if (wins.length > 0) windowsByBlock.set(bi, wins);
+}
 
-for (const strategy of ['word', 'ngram']) {
+for (const strategy of STAGE_ORDER) {
+let attempted = 0;
 let appliedThisStage = 0;
 for (const bi of unmatchedBlocksNow()) {
-const wins = windowsByBlock.get(bi);
+let wins = null;
+if (strategy !== 'exact') {
+wins = windowsByBlock.get(bi);
 if (!wins || wins.length === 0) continue;
+}
+attempted++;
 if (await tryBlock(bi, strategy, wins)) appliedThisStage++;
 }
-runHistory.push({ stage: strategy, applied: appliedThisStage });
-await new Promise(r => setTimeout(r, 0));
+if (attempted > 0) runHistory.push({ stage: strategy, applied: appliedThisStage });
+if (appliedThisStage > 0) { outerChanged = true; break; }
+abortIfCancelled();
+}
+if (unmatchedBlocksNow().length === 0) break;
+if (outerChanged) await new Promise(r => setTimeout(r, 0));
 }
 
 if (unmatchedBlocksDeferred().length > 0) {
@@ -2253,7 +2356,7 @@ current.push(lines[i]);
 }
 if (current.length > 0) {
 const searchLines = current.map(l => stripInvisibleChars(l));
-if (searchLines.length > 0) blocks.push({ searchLines, replLines: [] });
+if (searchLines.some(l => l.trim().length > 0)) blocks.push({ searchLines, replLines: [] });
 }
 } else {
 let i = 0;
@@ -2269,7 +2372,7 @@ i++;
 if (blockLines.length === 0) continue;
 
 const searchLines = blockLines.map(l => stripInvisibleChars(l));
-if (searchLines.length === 0) continue;
+if (!searchLines.some(l => l.trim().length > 0)) continue;
 blocks.push({ searchLines, replLines: [] });
 }
 }
@@ -2279,40 +2382,110 @@ return blocks;
 function parseMode1Pattern(rules, sep) {
 const lines = norm(rules).split('\n');
 const patterns = [];
-if (!sep) return patterns;
+if (!sep) {
+const fenceEvents = [];
+for (let fi = 0; fi < lines.length; fi++) {
+const raw = lines[fi];
+const m = raw.match(/^((?:[ \t]*>[ \t]*)*)[ \t]*(`{3,})/);
+if (m) {
+const depth = (m[1].match(/>/g) || []).length;
+fenceEvents.push({ index: fi, depth });
+}
+}
+const stackByDepth = new Map();
+const pairedBlocks = [];
+for (const ev of fenceEvents) {
+const stack = stackByDepth.get(ev.depth) || [];
+if (stack.length > 0) {
+const opener = stack.pop();
+pairedBlocks.push({ start: opener, end: ev.index, depth: ev.depth });
+} else {
+stack.push(ev.index);
+}
+stackByDepth.set(ev.depth, stack);
+}
+if (pairedBlocks.length === 0) return patterns;
+const shallowBlocks = pairedBlocks.filter(b => b.depth === 0 || b.depth === 1);
+if (shallowBlocks.length === 0) return patterns;
+const blocksByDepth = new Map();
+for (const b of shallowBlocks) {
+if (!blocksByDepth.has(b.depth)) blocksByDepth.set(b.depth, []);
+blocksByDepth.get(b.depth).push(b);
+}
+const pairs = [];
+for (const depthBlocks of blocksByDepth.values()) {
+depthBlocks.sort((a, b) => a.start - b.start);
+for (let k = 0; k + 1 < depthBlocks.length; k += 2) {
+pairs.push([depthBlocks[k], depthBlocks[k + 1]]);
+}
+}
+pairs.sort((a, b) => a[0].start - b[0].start);
+for (const [searchBlock, replBlock] of pairs) {
+const searchLines = [];
+for (let li = searchBlock.start + 1; li < searchBlock.end; li++) {
+searchLines.push(stripInvisibleChars(lines[li]));
+}
+const replLines = [];
+for (let li = replBlock.start + 1; li < replBlock.end; li++) {
+replLines.push(lines[li]);
+}
+if (searchLines.length > 0) {
+patterns.push({
+searchLines: searchLines.map(l => l.trim()),
+replLines: replLines.slice(),
+rawReplLines: replLines.slice(),
+lineIndices: {
+searchStart: searchBlock.start,
+sepIdx: -1,
+replEnd: replBlock.end
+}
+});
+}
+}
+return patterns;
+}
 let i = 0;
+const FENCE_LINE_RE = /^((?:[ \t]*>[ \t]*)*)[ \t]*(`{3,})/;
 
 while (i < lines.length) {
-const trimmed = lines[i].trim();
-if (trimmed.startsWith('```')) {
+const mOpen = lines[i].match(FENCE_LINE_RE);
+if (mOpen) {
+const searchDepth = (mOpen[1].match(/>/g) || []).length;
 const fenceStart = i;
 const searchLines = [];
 
 i++;
-while (i < lines.length && !lines[i].trim().startsWith('```')) {
+while (i < lines.length) {
+const mc = lines[i].match(FENCE_LINE_RE);
+if (mc && (mc[1].match(/>/g) || []).length === searchDepth) break;
 searchLines.push(stripInvisibleChars(lines[i]));
 i++;
 }
 if (i >= lines.length) break;
 
-i++; // move past closing search fence
+i++;
 
-const sepIdx = lines.findIndex(
-(line, idx) => idx >= i && line.trim().toLowerCase().includes(sep.toLowerCase())
-);
-if (sepIdx === -1) break;
+let sepIdx = -1;
+for (let k = i; k < lines.length; k++) {
+const ms = lines[k].match(FENCE_LINE_RE);
+if (ms && (ms[1].match(/>/g) || []).length === searchDepth) break;
+if (lines[k].trim().toLowerCase().includes(sep.toLowerCase())) { sepIdx = k; break; }
+}
+if (sepIdx === -1) { i = fenceStart + 1; continue; }
 
 let replOpen = sepIdx + 1;
 while (replOpen < lines.length && lines[replOpen].trim() === '') {
 replOpen++;
 }
-if (replOpen >= lines.length || !lines[replOpen].trim().startsWith('```')) {
-break;
-}
+if (replOpen >= lines.length) { i = fenceStart + 1; continue; }
+const mRepl = lines[replOpen].match(FENCE_LINE_RE);
+if (!mRepl || (mRepl[1].match(/>/g) || []).length !== searchDepth) { i = fenceStart + 1; continue; }
 
 const replLines = [];
 let replEnd = replOpen + 1;
-while (replEnd < lines.length && !lines[replEnd].trim().startsWith('```')) {
+while (replEnd < lines.length) {
+const mr = lines[replEnd].match(FENCE_LINE_RE);
+if (mr && (mr[1].match(/>/g) || []).length === searchDepth) break;
 replLines.push(lines[replEnd]);
 replEnd++;
 }
@@ -2480,10 +2653,11 @@ lineWildcard: lineWildcard ? lineWildcard.checked : false,
 lockedPattern: lockedPattern ? lockedPattern.checked : false,
 applyOnce: allowAmbiguityToggle ? allowAmbiguityToggle.checked : true,
 organizeMode: organizeModeToggle ? organizeModeToggle.checked : false,
-allOrNone: allOrNoneToggle ? allOrNoneToggle.checked : false,
 interpretEscapes: interpretEscapesToggle ? interpretEscapesToggle.checked : false,
 showMarkers: showMarkersToggle ? showMarkersToggle.checked : false,
-autoCopy: autoCopyToggle ? autoCopyToggle.checked : false
+autoCopy: autoCopyToggle ? autoCopyToggle.checked : false,
+replaceUnmatchedLines: replaceUnmatchedLinesToggle ? replaceUnmatchedLinesToggle.checked : false,
+wildcardAnchorMin: wildcardAnchorMin ? wildcardAnchorMin.value : '4'
 };
 }
 
@@ -2523,10 +2697,11 @@ if (lineWildcard && typeof s.lineWildcard === 'boolean') lineWildcard.checked = 
 if (lockedPattern && typeof s.lockedPattern === 'boolean') lockedPattern.checked = s.lockedPattern;
 if (allowAmbiguityToggle && typeof s.applyOnce === 'boolean') allowAmbiguityToggle.checked = s.applyOnce;
 if (organizeModeToggle && typeof s.organizeMode === 'boolean') organizeModeToggle.checked = s.organizeMode;
-if (allOrNoneToggle && typeof s.allOrNone === 'boolean') allOrNoneToggle.checked = s.allOrNone;
 if (interpretEscapesToggle && typeof s.interpretEscapes === 'boolean') interpretEscapesToggle.checked = s.interpretEscapes;
 if (showMarkersToggle && typeof s.showMarkers === 'boolean') showMarkersToggle.checked = s.showMarkers;
 if (autoCopyToggle && typeof s.autoCopy === 'boolean') autoCopyToggle.checked = s.autoCopy;
+if (replaceUnmatchedLinesToggle && typeof s.replaceUnmatchedLines === 'boolean') replaceUnmatchedLinesToggle.checked = s.replaceUnmatchedLines;
+if (wildcardAnchorMin && s.wildcardAnchorMin != null) wildcardAnchorMin.value = s.wildcardAnchorMin;
 if (typeof s.currentMode === 'number' && (s.currentMode === 1 || s.currentMode === 2)) currentMode = s.currentMode;
 return true;
 } catch (e) {
@@ -2754,6 +2929,12 @@ showMarkers = checked;
 updateStats();
 });
 }
+if (replaceUnmatchedLinesToggle) {
+replaceUnmatchedLinesToggle.addEventListener('change', updateStats);
+}
+if (wildcardAnchorMin) {
+wildcardAnchorMin.addEventListener('input', updateStats);
+}
 }
 
 function setupKeyboardNav(tabs) {
@@ -2814,7 +2995,9 @@ tr.appendChild(tdSim);
 
 const tdLines = document.createElement('td');
 tdLines.textContent = r.success
-? `${r.originalLineCount ?? 0} → ${r.replacementLineCount ?? 0}`
+? (currentMode === 2
+? `+${r.replacementLineCount ?? 0}`
+: `${r.originalLineCount ?? 0} → ${r.replacementLineCount ?? 0}`)
 : '';
 tr.appendChild(tdLines);
 
@@ -2957,6 +3140,7 @@ if (replaceBtn) { replaceBtn.textContent = currentMode === 1 ? 'Replace All' : '
 return;
 }
 
+
 const similarityThreshold = Math.min(100, Math.max(0, parseInt(similarityRange ? similarityRange.value : 80, 10) || 0));
 
 const greedy = greedyEllipsis ? greedyEllipsis.checked : false;
@@ -2967,7 +3151,6 @@ newContent = content,
 totalApplied = 0;
 try {
 let result = null;
-const allOrNone = !!(allOrNoneToggle && allOrNoneToggle.checked);
 if (currentMode === 1) {
 result = await ReplaceMode1(content, rules, similarityThreshold, greedy, applyMultipleMatches, originalContent, originalRawRules, signal, showStatus, updateStats);
 newContent = result.newContent;
@@ -2975,13 +3158,15 @@ totalApplied = result.totalApplied;
 reports = result.reports;
 lastUsedCount = result.usedCount;
 
-const everyRuleMatched = reports.length > 0 && reports.every(r => r.success);
-if (allOrNone && result.totalRules > 0 && !everyRuleMatched) {
-newContent = originalContent;
-totalApplied = 0;
-lastUsedCount = 0;
-} else if (result.patterns || (result.skippedRanges && result.skippedRanges.length > 0)) {
-rebuildMode1RulesComplete(originalRawRules, result.patterns || [], result.usedPatterns || new Set(), lockedPattern ? lockedPattern.checked : false, result.skippedRanges);
+if (result.patterns || (result.skippedRanges && result.skippedRanges.length > 0)) {
+const preserveRules = applyMultipleMatches;
+rebuildMode1RulesComplete(
+originalRawRules,
+result.patterns || [],
+preserveRules ? new Set() : (result.usedPatterns || new Set()),
+lockedPattern ? lockedPattern.checked : false,
+preserveRules ? [] : result.skippedRanges
+);
 updateStats();
 }
 } else {
@@ -2991,12 +3176,7 @@ totalApplied = result.totalApplied;
 reports = result.reports;
 lastUsedCount = result.usedCount;
 
-const everyBlockMatched = reports.length > 0 && reports.every(r => r.success);
-if (allOrNone && result.totalRules > 0 && !everyBlockMatched) {
-newContent = originalContent;
-totalApplied = 0;
-lastUsedCount = 0;
-} else if (!lockedPattern.checked && result.usedBlocks && result.usedBlocks.size) {
+if (!lockedPattern.checked && !applyMultipleMatches && result.usedBlocks && result.usedBlocks.size) {
 const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value.trim() : '%%%';
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
 const newBlocks = allBlocks.filter((_, idx) => !result.usedBlocks.has(idx));
@@ -3023,7 +3203,7 @@ const skippedCount = (currentMode === 1 && result && typeof result.skippedCount 
 let msg = '';
 if (totalApplied > 0) msg = `✅ ${totalApplied} pattern(s) applied · ${runsUsed} run(s).`;
 else msg = 'No result';
-if (skippedCount > 0) msg += ` · 🗑️ ${skippedCount} identical pair(s) deleted`;
+if (skippedCount > 0 && !applyMultipleMatches) msg += ` · 🗑️ ${skippedCount} identical pair(s) deleted`;
 showStatus(msg, totalApplied > 0 ? 'info' : 'warning');
 } catch (err) {
 console.error(err);
@@ -3039,18 +3219,20 @@ if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0 && current
 rebuildMode1RulesComplete(
 originalRawRules,
 partialReplaceSnapshot.patterns,
-partialReplaceSnapshot.usedPatterns || new Set(),
+applyMultipleMatches ? new Set() : (partialReplaceSnapshot.usedPatterns || new Set()),
 lockedPattern ? lockedPattern.checked : false,
-partialReplaceSnapshot.skippedRanges
+applyMultipleMatches ? [] : partialReplaceSnapshot.skippedRanges
 );
 updateStats();
 } else if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0 && currentMode === 2 && partialReplaceSnapshot.usedBlocks) {
+if (!applyMultipleMatches) {
 const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value.trim() : '%%%';
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
 const newBlocks = allBlocks.filter((_, idx) => !partialReplaceSnapshot.usedBlocks.has(idx));
 const joiner = sepVal.length > 0 ? ('\n' + sepVal + '\n') : '\n\n';
 patternArea.value = newBlocks.map(b => b.searchLines.join('\n')).join(joiner);
 updateStats();
+}
 }
 showStatus('⏹️ Operation cancelled.', 'warning');
 } else {
@@ -3098,6 +3280,9 @@ if (mode1Controls) mode1Controls.classList.toggle('hidden', currentMode !== 1);
 if (mode2Controls) mode2Controls.classList.toggle('hidden', currentMode !== 2);
 if (organizeModeToggle && organizeModeToggle.closest) {
 organizeModeToggle.closest('.toggle-wrap').style.display = currentMode === 2 ? 'none' : '';
+}
+if (replaceUnmatchedLinesToggle && replaceUnmatchedLinesToggle.closest) {
+replaceUnmatchedLinesToggle.closest('.toggle-wrap').style.display = currentMode === 1 ? 'none' : '';
 }
 const msg = currentMode === 1 ?
 'Mode 1: Search block must match; replacement lines are applied in order.' :
@@ -3171,6 +3356,8 @@ if (interpretEscapesToggle) interpretEscapesToggle.checked = false;
 if (lockedPattern) lockedPattern.checked = false;
 if (showMarkersToggle) showMarkersToggle.checked = false;
 if (autoCopyToggle) autoCopyToggle.checked = false;
+if (replaceUnmatchedLinesToggle) replaceUnmatchedLinesToggle.checked = false;
+if (wildcardAnchorMin) wildcardAnchorMin.value = 4;
 if (similarityRange) similarityRange.value = 80;
 
 if (mode2Threshold) mode2Threshold.value = 2;
@@ -3272,6 +3459,9 @@ if (mode1Controls) mode1Controls.classList.toggle('hidden', currentMode !== 1);
 if (mode2Controls) mode2Controls.classList.toggle('hidden', currentMode !== 2);
 if (organizeModeToggle && organizeModeToggle.closest) {
 organizeModeToggle.closest('.toggle-wrap').style.display = currentMode === 2 ? 'none' : '';
+}
+if (replaceUnmatchedLinesToggle && replaceUnmatchedLinesToggle.closest) {
+replaceUnmatchedLinesToggle.closest('.toggle-wrap').style.display = currentMode === 1 ? 'none' : '';
 }
 setModeHint(currentMode === 1
 ? 'Mode 1: Search block must match; replacement lines are applied in order.'
