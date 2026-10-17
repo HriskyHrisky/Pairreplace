@@ -725,19 +725,26 @@ const s = String(text ?? '');
 const runs = [];
 let i = 0;
 while (i < s.length) {
-let len = 0;
-let raw = '';
-if (s.startsWith('...', i)) { len = 3; raw = '...'; }
-else if (s[i] === '…') { len = 1; raw = '…'; }
-if (len === 0) { i++; continue; }
+if (s[i] === '.' || s[i] === '…') {
 const start = i;
-const end = start + len;
+let dotCount = 0;
+let ellCount = 0;
+while (i < s.length && (s[i] === '.' || s[i] === '…')) {
+if (s[i] === '.') dotCount++;
+else ellCount++;
+i++;
+}
+const end = i;
 const before = start > 0 ? s[start - 1] : '';
 const after = end < s.length ? s[end] : '';
-if (before === '.' || before === '…' || after === '.' || after === '…') { i = end; continue; }
-if (!isEllipsisBoundaryChar(before) || !isEllipsisBoundaryChar(after)) { i = end; continue; }
-runs.push({ start, end, raw });
-i = end;
+if (!isEllipsisBoundaryChar(before) || !isEllipsisBoundaryChar(after)) continue;
+// Wildcard iff: has `…` chars, OR dot count is a positive multiple of 3.
+// Consecutive dots/ellipses → one run (regardless of total length).
+const isWildcard = ellCount > 0 || (dotCount > 0 && dotCount % 3 === 0);
+if (isWildcard) runs.push({ start, end, raw: s.slice(start, end) });
+} else {
+i++;
+}
 }
 return runs;
 }
@@ -750,7 +757,10 @@ if (!ellipsisWildcardEnabled) {
 return { type: 'literal_line', text: trimmed.replace(/\\\.\.\./g, '...').replace(/\\…/g, '…') };
 }
 
-if (trimmed === '...' || trimmed === '…') {
+// Whole-line wildcard: trimmed line is entirely `...` (n×3 dots) or `…` (n ellipsis chars).
+// `....`, `.....`, `.......` are NOT wildcards — they fall through to literal.
+const isPureWildcardLine = /^(?:\.{3})+$/.test(trimmed) || /^…+$/.test(trimmed);
+if (isPureWildcardLine) {
 return { type: 'whole_wildcard', greedy: false };
 }
 
@@ -870,48 +880,48 @@ endCol
 }
 
 function getBookendAnchors(items, maxDepth = Infinity) {
-  const firstLines = [];
-  const lastLines = [];
-  const frontUsable = items.length > 0 && items[0].type !== 'wildcard';
-  const backUsable  = items.length > 0 && items[items.length - 1].type !== 'wildcard';
+const firstLines = [];
+const lastLines = [];
+const frontUsable = items.length > 0 && items[0].type !== 'wildcard';
+const backUsable= items.length > 0 && items[items.length - 1].type !== 'wildcard';
 
-  if (frontUsable) {
-    const it = items[0];
-    if (it.type === 'literal_block') {
-      const lines = it.text.split('\n').filter(l => l.trim().length > 0);
-      firstLines.push(...lines.slice(0, maxDepth));
-    } else if (it.type === 'inline_pattern') {
-      for (const t of it.tokens || []) {
-        if (t.type === 'literal' && (t.text || '').trim().length > 0) {
-          firstLines.push(t.text.trim());
-          break;
-        }
-      }
-    }
-  }
+if (frontUsable) {
+const it = items[0];
+if (it.type === 'literal_block') {
+const lines = it.text.split('\n').filter(l => l.trim().length > 0);
+firstLines.push(...lines.slice(0, maxDepth));
+} else if (it.type === 'inline_pattern') {
+for (const t of it.tokens || []) {
+if (t.type === 'literal' && (t.text || '').trim().length > 0) {
+firstLines.push(t.text.trim());
+break;
+}
+}
+}
+}
 
-  if (backUsable) {
-    const it = items[items.length - 1];
-    if (it.type === 'literal_block') {
-      const lines = it.text.split('\n').filter(l => l.trim().length > 0);
-      for (let j = lines.length - 1; j >= Math.max(0, lines.length - maxDepth); j--) {
-        lastLines.push(lines[j]);
-      }
-    } else if (it.type === 'inline_pattern') {
-      const toks = it.tokens || [];
-      for (let k = toks.length - 1; k >= 0; k--) {
-        const t = toks[k];
-        if (t.type === 'literal' && (t.text || '').trim().length > 0) {
-          lastLines.push(t.text.trim());
-          break;
-        }
-      }
-    }
-  }
+if (backUsable) {
+const it = items[items.length - 1];
+if (it.type === 'literal_block') {
+const lines = it.text.split('\n').filter(l => l.trim().length > 0);
+for (let j = lines.length - 1; j >= Math.max(0, lines.length - maxDepth); j--) {
+lastLines.push(lines[j]);
+}
+} else if (it.type === 'inline_pattern') {
+const toks = it.tokens || [];
+for (let k = toks.length - 1; k >= 0; k--) {
+const t = toks[k];
+if (t.type === 'literal' && (t.text || '').trim().length > 0) {
+lastLines.push(t.text.trim());
+break;
+}
+}
+}
+}
 
-  if (firstLines.length === 0 && lastLines.length === 0) return null;
-  const sameEdge = frontUsable && backUsable && items.length === 1;
-  return { firstLines, lastLines, sameEdge };
+if (firstLines.length === 0 && lastLines.length === 0) return null;
+const sameEdge = frontUsable && backUsable && items.length === 1;
+return { firstLines, lastLines, sameEdge };
 }
 
 function getBookendItemIndices(items) {
@@ -1294,10 +1304,10 @@ if (cursorLine >= contentLines.length) return { success: false, bestSim: rate(),
 const __pmpToks = item.tokens || [];
 const __pmpFirst = __pmpToks[0];
 if (__pmpFirst && __pmpFirst.type === 'literal' && __pmpFirst.text.length > 0 && !__pmpFirst.text.includes('\n')) {
-  const __pmpLine = contentLines[cursorLine].slice(cursorCol);
-  if (!__pmpLine.startsWith(__pmpFirst.text)) {
-    return { success: false, bestSim: rate(), failureReason: 'Inline pattern mismatch' };
-  }
+const __pmpLine = contentLines[cursorLine].slice(cursorCol);
+if (!__pmpLine.startsWith(__pmpFirst.text)) {
+return { success: false, bestSim: rate(), failureReason: 'Inline pattern mismatch' };
+}
 }
 const __pmpHi = Number.isFinite(windowHi) ? Math.min(windowHi, contentLines.length - 1) : contentLines.length - 1;
 const remaining = [contentLines[cursorLine].slice(cursorCol), ...contentLines.slice(cursorLine + 1, __pmpHi + 1)].join('\n');
@@ -1396,32 +1406,32 @@ const firstTok = toks.find(t => t.type !== 'literal' || t.text.length > 0);
 const firstLit = (firstTok && firstTok.type === 'literal') ? firstTok.text : null;
 // Detect whether any literal token spans a newline.
 const anchorIsSingleLine = !(anchorItem.tokens || []).some(
-  t => t.type === 'literal' && t.text.includes('\n')
+t => t.type === 'literal' && t.text.includes('\n')
 );
 
 if (anchorIsSingleLine) {
-  // No suffix join: match against the line slice only.
-  for (let i = fromIdx; i <= hardEnd; i++) {
-    const col = (i === fromIdx) ? startCol : 0;
-    const lineSlice = contentLines[i].slice(col);
-    if (firstLit && !lineSlice.startsWith(firstLit)) continue;
-    const res = matchInlineWildcardTokens(lineSlice, anchorItem.tokens, greedy, 0);
-    if (res && res.success) positions.push(i);
-  }
+// No suffix join: match against the line slice only.
+for (let i = fromIdx; i <= hardEnd; i++) {
+const col = (i === fromIdx) ? startCol : 0;
+const lineSlice = contentLines[i].slice(col);
+if (firstLit && !lineSlice.startsWith(firstLit)) continue;
+const res = matchInlineWildcardTokens(lineSlice, anchorItem.tokens, greedy, 0);
+if (res && res.success) positions.push(i);
+}
 } else {
-  // Multi-line anchor: build the bounded suffix once, then walk offsets.
-  const parts = [contentLines[fromIdx].slice(startCol)];
-  for (let k = fromIdx + 1; k <= hardEnd; k++) parts.push(contentLines[k]);
-  const suffix = parts.join('\n');
-  const lineOff = new Array(hardEnd - fromIdx + 1);
-  lineOff[0] = 0;
-  for (let k = 1; k < lineOff.length; k++) {
-    lineOff[k] = lineOff[k - 1] + (contentLines[fromIdx + k - 1].length - (k === 1 ? startCol : 0)) + 1;
-  }
-  for (let rel = 0; rel < lineOff.length; rel++) {
-    const res = matchInlineWildcardTokens(suffix, anchorItem.tokens, greedy, lineOff[rel]);
-    if (res && res.success) positions.push(fromIdx + rel);
-  }
+// Multi-line anchor: build the bounded suffix once, then walk offsets.
+const parts = [contentLines[fromIdx].slice(startCol)];
+for (let k = fromIdx + 1; k <= hardEnd; k++) parts.push(contentLines[k]);
+const suffix = parts.join('\n');
+const lineOff = new Array(hardEnd - fromIdx + 1);
+lineOff[0] = 0;
+for (let k = 1; k < lineOff.length; k++) {
+lineOff[k] = lineOff[k - 1] + (contentLines[fromIdx + k - 1].length - (k === 1 ? startCol : 0)) + 1;
+}
+for (let rel = 0; rel < lineOff.length; rel++) {
+const res = matchInlineWildcardTokens(suffix, anchorItem.tokens, greedy, lineOff[rel]);
+if (res && res.success) positions.push(fromIdx + rel);
+}
 }
 }
 
@@ -2099,18 +2109,18 @@ startMin = Math.max(0, Math.min(startMin, Math.max(0, startMax)));
 // Build a lookup once, before runSearchPass:
 let windowRanges = null;
 if (windows && windows.length > 0) {
-  windowRanges = windows.slice().sort((a, b) => a[0] - b[0]);
+windowRanges = windows.slice().sort((a, b) => a[0] - b[0]);
 }
 
 function windowHiFor(start) {
-  if (!windowRanges) return Infinity;
-  let lo = 0, hi = windowRanges.length;
-  while (lo < hi) {
-    const m = (lo + hi) >>> 1;
-    if (windowRanges[m][0] <= start) lo = m + 1; else hi = m;
-  }
-  if (lo > 0 && start <= windowRanges[lo - 1][1]) return windowRanges[lo - 1][1];
-  return Infinity;
+if (!windowRanges) return Infinity;
+let lo = 0, hi = windowRanges.length;
+while (lo < hi) {
+const m = (lo + hi) >>> 1;
+if (windowRanges[m][0] <= start) lo = m + 1; else hi = m;
+}
+if (lo > 0 && start <= windowRanges[lo - 1][1]) return windowRanges[lo - 1][1];
+return Infinity;
 }
 
 const allCandidates = [];
@@ -2550,13 +2560,13 @@ if (ellipsisWildcardEnabled && findFreeStandingEllipsisRuns(searchLines[i]).leng
 bookendBackCount++;
 }
 const hasWildcardInBlock = findFreeStandingEllipsisRuns(searchLines.join('\n')).length > 0
-  || searchLines.some(l => { const t = (l||'').trim(); return t === '...' || t === '…'; });
+|| searchLines.some(l => { const t = (l||'').trim(); return t === '...' || t === '…'; });
 const effectiveFrontCount = hasWildcardInBlock
-  ? (blockWindowDepth ? Math.min(bookendFrontCount, blockWindowDepth.frontDepth) : bookendFrontCount)
-  : bookendFrontCount;
+? (blockWindowDepth ? Math.min(bookendFrontCount, blockWindowDepth.frontDepth) : bookendFrontCount)
+: bookendFrontCount;
 const effectiveBackCount = hasWildcardInBlock
-  ? (blockWindowDepth ? Math.min(bookendBackCount, blockWindowDepth.backDepth) : bookendBackCount)
-  : 0;
+? (blockWindowDepth ? Math.min(bookendBackCount, blockWindowDepth.backDepth) : bookendBackCount)
+: 0;
 
 if (duplicateOfBlock.has(bi)) {
 skipBlocks.add(bi);
@@ -4029,71 +4039,71 @@ const minMid = mpl > 0 ? Math.floor(mpl * 0.5) : 0;
 const maxMid = mpl > 0 ? Math.max(Math.ceil(mpl * 3), mpl + 500) : 500;
 
 function middleSimilarity(middle) {
-  if (mpl === 0) return middle.length === 0 ? 1 : 0;
-  if (middle.length === 0) return 0;
-  if (exactEq(middle, middlePattern)) return 1;
-  // Two algorithms, take the best.
-  const w = wordAnchorSimilarity(middle, middlePattern, SIM_ANCHOR_DEFAULT).similarity;
-  const t = oneThirdRecursionSimilarity(middle, middlePattern);
-  return Math.max(w, t);
+if (mpl === 0) return middle.length === 0 ? 1 : 0;
+if (middle.length === 0) return 0;
+if (exactEq(middle, middlePattern)) return 1;
+// Two algorithms, take the best.
+const w = wordAnchorSimilarity(middle, middlePattern, SIM_ANCHOR_DEFAULT).similarity;
+const t = oneThirdRecursionSimilarity(middle, middlePattern);
+return Math.max(w, t);
 }
 
 let bestResult = null;
 let bestRejectedSim = 0;
 let bestRejectedInfo = null;
 for (const fh of frontHits) {
-  if (fh.end > work.length) continue;
-  const loB = fh.end + minMid;
-  const hiB = fh.end + maxMid;
+if (fh.end > work.length) continue;
+const loB = fh.end + minMid;
+const hiB = fh.end + maxMid;
 
-  let lo = 0, hi = backHits.length;
-  while (lo < hi) {
-    const m = (lo + hi) >>> 1;
-    if (backHits[m].start < loB) lo = m + 1; else hi = m;
-  }
-  let end = lo;
-  while (end < backHits.length && backHits[end].start <= hiB) end++;
-  if (lo >= end) continue;
+let lo = 0, hi = backHits.length;
+while (lo < hi) {
+const m = (lo + hi) >>> 1;
+if (backHits[m].start < loB) lo = m + 1; else hi = m;
+}
+let end = lo;
+while (end < backHits.length && backHits[end].start <= hiB) end++;
+if (lo >= end) continue;
 
-  for (let j = lo; j < end; j++) {
-    const bh = backHits[j];
-    const middle = work.slice(fh.end, bh.start);
-    const midSim = middleSimilarity(middle);
-    const rate = (frontLen + midSim * mpl + backLen) / sLen;
+for (let j = lo; j < end; j++) {
+const bh = backHits[j];
+const middle = work.slice(fh.end, bh.start);
+const midSim = middleSimilarity(middle);
+const rate = (frontLen + midSim * mpl + backLen) / sLen;
 
-    if (rate < threshold) {
-      if (rate > bestRejectedSim) {
-        bestRejectedSim = rate;
-        bestRejectedInfo = { midSim, middleLen: middle.length, frontLen, backLen, mpl };
-      }
-      continue;
-    }
+if (rate < threshold) {
+if (rate > bestRejectedSim) {
+bestRejectedSim = rate;
+bestRejectedInfo = { midSim, middleLen: middle.length, frontLen, backLen, mpl };
+}
+continue;
+}
 
-    // Exact match on both anchors and middle → short-circuit.
-    if (midSim === 1 && rate === 1 && !greedy) {
-      return { match: { start: fh.start, end: bh.end, sim: rate } };
-    }
+// Exact match on both anchors and middle → short-circuit.
+if (midSim === 1 && rate === 1 && !greedy) {
+return { match: { start: fh.start, end: bh.end, sim: rate } };
+}
 
-    const candidate = { start: fh.start, end: bh.end, sim: rate };
-    if (!bestResult) { bestResult = candidate; continue; }
-    if (greedy) {
-      const lenDiff = (candidate.end - candidate.start) - (bestResult.end - bestResult.start);
-      if (lenDiff > 0) { bestResult = candidate; continue; }
-      if (lenDiff < 0) continue;
-    }
-    if (Math.abs(candidate.sim - bestResult.sim) > 1e-9) {
-      if (candidate.sim > bestResult.sim) bestResult = candidate;
-      continue;
-    }
-    if (candidate.start < bestResult.start) bestResult = candidate;
-  }
+const candidate = { start: fh.start, end: bh.end, sim: rate };
+if (!bestResult) { bestResult = candidate; continue; }
+if (greedy) {
+const lenDiff = (candidate.end - candidate.start) - (bestResult.end - bestResult.start);
+if (lenDiff > 0) { bestResult = candidate; continue; }
+if (lenDiff < 0) continue;
+}
+if (Math.abs(candidate.sim - bestResult.sim) > 1e-9) {
+if (candidate.sim > bestResult.sim) bestResult = candidate;
+continue;
+}
+if (candidate.start < bestResult.start) bestResult = candidate;
+}
 }
 if (!bestResult) {
-  return {
-    error: bestRejectedSim > 0 ? 'Below threshold' : 'No match',
-    bestSim: bestRejectedSim,
-    info: bestRejectedInfo
-  };
+return {
+error: bestRejectedSim > 0 ? 'Below threshold' : 'No match',
+bestSim: bestRejectedSim,
+info: bestRejectedInfo
+};
 }
 return { match: bestResult };
 }
@@ -4202,9 +4212,9 @@ while (pos < work.length) {
 const r = runStringCharBookend(work, searchStr, threshold, greedy, pos);
 if (!r || r.error) {
 if (count === 0) {
-  stringFailureReason = r ? r.error : 'No match';
-  if (r && typeof r.bestSim === 'number') bestSim = Math.max(bestSim, r.bestSim);
-  if (r && r.info) bestSimInfo = r.info;
+stringFailureReason = r ? r.error : 'No match';
+if (r && typeof r.bestSim === 'number') bestSim = Math.max(bestSim, r.bestSim);
+if (r && r.info) bestSimInfo = r.info;
 }
 break;
 }
@@ -4221,29 +4231,29 @@ if (!applyMultipleMatches) break;
 }
 }
 } else {
-      if (isExactThreshold(threshold)) {
-        const collected = [];
-        let pos = 0;
-        while (pos <= work.length) {
-          const m = runStringPattern(work, tokens, greedy, pos);
-          if (!m) { if (count === 0) stringFailureReason = 'No match'; break; }
-          if (m.end <= m.start) break;
-          collected.push(m);
-          pos = m.end;
-          if (signal?.aborted) throw new Error('Operation cancelled');
-          if (!applyMultipleMatches) break;
-          if (collected.length > 100000) break;
-        }
-        for (let k = collected.length - 1; k >= 0; k--) {
-          const m = collected[k];
-          const replacement = buildStringReplacement(replStr, m.captures);
-          totalMatchChars += searchStr.length;
-          totalReplaceChars += replacement.length;
-          work = work.slice(0, m.start) + replacement + work.slice(m.end);
-          count++;
-        }
-      } else {
-        const firstLit = tokens.find(t => t.type === 'literal' && t.text.length > 0);
+if (isExactThreshold(threshold)) {
+const collected = [];
+let pos = 0;
+while (pos <= work.length) {
+const m = runStringPattern(work, tokens, greedy, pos);
+if (!m) { if (count === 0) stringFailureReason = 'No match'; break; }
+if (m.end <= m.start) break;
+collected.push(m);
+pos = m.end;
+if (signal?.aborted) throw new Error('Operation cancelled');
+if (!applyMultipleMatches) break;
+if (collected.length > 100000) break;
+}
+for (let k = collected.length - 1; k >= 0; k--) {
+const m = collected[k];
+const replacement = buildStringReplacement(replStr, m.captures);
+totalMatchChars += searchStr.length;
+totalReplaceChars += replacement.length;
+work = work.slice(0, m.start) + replacement + work.slice(m.end);
+count++;
+}
+} else {
+const firstLit = tokens.find(t => t.type === 'literal' && t.text.length > 0);
 let pos = 0;
 const collected = [];
 while (pos <= work.length) {
@@ -4297,8 +4307,8 @@ skippedCount: duplicateRanges.length
 reports.push({ bestSimilarity: bestSim || 1, success: true, originalLineCount: 0, replacementLineCount: 0, originalCharCount: totalMatchChars, replacementCharCount: totalReplaceChars, isStringMode: true, failureReason: null, applications: count, searchText: searchStr, range });
 } else {
 const failNote = stringFailureReason === 'Below threshold' && bestSimInfo
-  ? `Below threshold (best ${Math.round(bestSim * 100)}%, midSim ${Math.round(bestSimInfo.midSim * 100)}%, midLen ${bestSimInfo.middleLen})`
-  : (stringFailureReason || 'No match');
+? `Below threshold (best ${Math.round(bestSim * 100)}%, midSim ${Math.round(bestSimInfo.midSim * 100)}%, midLen ${bestSimInfo.middleLen})`
+: (stringFailureReason || 'No match');
 reports.push({ bestSimilarity: bestSim, success: false, failureReason: failNote, applications: 0, searchText: searchStr, range });
 }
 }
