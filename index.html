@@ -18,7 +18,8 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 .global-item label { font-weight: 400; color: #475569; }
 .global-item input[type="range"] { flex: 1; max-width: 300px; accent-color: #3b82f6; cursor: pointer; }
 .global-item .val { min-width: 36px; font-weight: 600; color: #0f172a; }
-.toggle-wrap { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; cursor: pointer; user-select: none; transition: opacity 0.2s; }
+.toggle-wrap { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity 0.2s; }
+.toggle-wrap > * { user-select: none; -webkit-user-select: none; cursor: pointer; }
 .toggle-wrap input[type="checkbox"] { width: 18px; height: 18px; accent-color: #3b82f6; cursor: pointer; }
 .toggle-wrap input[type="checkbox"]:disabled { accent-color: #94a3b8; cursor: not-allowed; }
 .mode-tabs { display: flex; gap: 4px; background: #f1f5f9; padding: 4px; margin-bottom: 18px; border: 1px solid #e2e8f0; }
@@ -29,7 +30,7 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 .textarea-box label { font-size: 14px; font-weight: 600; margin-bottom: 5px; color: #1e293b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
 .textarea-box label .pattern-extras { font-weight: 400; font-size: 13px; color: #64748b; background: #f1f5f9; padding: 1px 12px; white-space: nowrap; }
 .pattern-line-badge { font-size: 13px; font-weight: 500; color: #334155; background: #eef2ff; padding: 1px 12px; white-space: nowrap; }
-.textarea-box textarea { flex: 1; min-height: 170px; padding: 12px 16px; border: 1.5px solid #d1d9e6; font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical; transition: border 0.15s; background: #fafbfc; color: #0f172a; tab-size: 2; }
+.textarea-box textarea { flex: 1 1 auto; height: 170px; min-height: 80px; padding: 12px 16px; border: 1.5px solid #d1d9e6; font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical; transition: border 0.15s; background: #fafbfc; color: #0f172a; tab-size: 2; scrollbar-gutter: stable; }
 .textarea-box textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.10); background: #fff; }
 .stats-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; align-items: center; }
 .stat-badge { background: #fff; padding: 2px 12px; font-size: 13px; font-weight: 500; border: 1px solid #d1d9e6; white-space: nowrap; }
@@ -152,7 +153,7 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <span class="group-title">STRING FIND &amp; REPLACE</span>
 <div class="toggle-wrap" id="stringModeWrap">
 <input type="checkbox" id="stringModeToggle" title="Off by default. When ON, rules are treated as literal strings and replaced globally (not line-based). Use 100% similarity for short strings to ensure correctness." />
-<label for="stringModeToggle">string-based (default off)</label>
+<label for="stringModeToggle">String-based</label>
 </div>
 <div class="toggle-wrap child-toggle" id="stringEllipsisWrap">
 <input type="checkbox" id="stringEllipsisToggle" title="When ON, … / …
@@ -187,7 +188,7 @@ Mode 2 · Block matching
 <label for="patternArea">Rules (textarea 2)
 <span class="pattern-extras"><span class="count" id="patternCharCount">0 chars</span><span class="pattern-line-badge" id="patternLineBadge">0 lines</span></span>
 </label>
-<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated (first k non-empty lines = signature, rest = replacement)" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+<textarea id="patternArea" placeholder="Mode 1: ``` search ``` separator ``` repl ```&#10;Mode 2: blocks separated (leading bookend lines, then replacement)" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 <div class="stats-row">
 <span class="stat-badge">✅: <span id="appliedCount">0</span></span>
 <span class="stat-badge" title="Actual Applied − Unique patterns (greater than 0 only when Apply once is OFF)">Ambiguity: <span id="usedRules">0</span></span>
@@ -197,10 +198,16 @@ Mode 2 · Block matching
 </div>
 </div>
 <div id="mode1Controls" class="mode-controls">
-<div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace"/><small style="font-size:12px;color:#64748b;margin-left:6px;font-weight:400;">💡 Separator alone defines a search/replace pair — no codeblocks needed.</small></label></div>
+<div class="group" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+<label>Separator: <input type="text" id="separatorInput" value="replace"/></label>
+<small style="font-size:12px;color:#64748b;font-weight:400;">Separator alone defines a search/replace pair — no codeblocks needed.</small>
+</div>
 </div>
 <div id="mode2Controls" class="mode-controls hidden">
-<div class="group"><label>Separator: <input type="text" id="mode2SeparatorInput" value="%%%" /><small style="font-size:12px;color:#64748b;margin-left:6px;font-weight:400;">💡 Blocks split by this — no codeblocks ever needed.</small></label></div>
+<div class="group" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+<label>Separator: <input type="text" id="mode2SeparatorInput" value="%%%" /></label>
+<small style="font-size:12px;color:#64748b;font-weight:400;">Blocks split by this — no codeblocks ever needed.</small>
+</div>
 <div class="group"><label>Min matched chars: <input type="number" id="mode2Threshold" value="80" min="1" max="9999" aria-label="Minimum matched chars for Mode 2" /></label></div>
 </div>
 <div class="mode-hint" id="modeHint">
@@ -2555,12 +2562,13 @@ windows = blockWindowsList;
 }
 
 let bookendFrontCount = 0;
-for (const line of searchLines) {
+for (let bi2 = 0; bi2 < searchLines.length; bi2++) {
+const line = searchLines[bi2];
 const t = (line || '').trim();
 if (t === '') continue;
 if (ellipsisWildcardEnabled && (t === '…' || t === '...')) break;
 if (ellipsisWildcardEnabled && findFreeStandingEllipsisRuns(line).length > 0) break;
-bookendFrontCount++;
+bookendFrontCount = bi2 + 1;
 }
 let bookendBackCount = 0;
 for (let i = searchLines.length - 1; i >= 0; i--) {
@@ -2576,7 +2584,7 @@ findFreeStandingEllipsisRuns(searchLines.join('\n')).length > 0
 );
 const effectiveFrontCount = hasWildcardInBlock
 ? (blockWindowDepth ? Math.min(bookendFrontCount, blockWindowDepth.frontDepth) : bookendFrontCount)
-: 1;
+: bookendFrontCount;
 const effectiveBackCount = hasWildcardInBlock
 ? (blockWindowDepth ? Math.min(bookendBackCount, blockWindowDepth.backDepth) : bookendBackCount)
 : 0;
@@ -2587,11 +2595,7 @@ recordBlockFailure(bi, 'Duplicate of pair #' + (duplicateOfBlock.get(bi) + 1), 0
 return false;
 }
 
-if (searchLines.length === 0) {
-recordBlockFailure(bi, 'Search lines missing', 0);
-return false;
-}
-if (searchLines.every(l => (l || '').trim().length === 0)) {
+if (searchLines.length === 0 || searchLines.every(l => (l || '').trim().length === 0)) {
 recordBlockFailure(bi, 'Search block is blank', 0);
 return false;
 }
@@ -2628,7 +2632,7 @@ if (counted >= signatureLiteralCount) break;
 }
 }
 if (signatureCharCount < minMatchedChars) {
-recordBlockFailure(bi, `Signature has fewer than ${minMatchedChars} chars`, 0);
+recordBlockFailure(bi, `Leading bookend has fewer than ${minMatchedChars} chars`, 0);
 return false;
 }
 if (literalOnlyLines.length === 0) {
@@ -2698,6 +2702,7 @@ mode2LastYieldTime = performance.now();
 }
 let literalMatched = 0;
 let matchedChars = 0;
+let exactBookendChars = 0;
 let simSum = 0;
 let curIdx = i;
 let lastMatchedPos = i - 1;
@@ -2805,11 +2810,15 @@ continue;
 const isBookendLine = j < effectiveFrontCount || j >= searchLines.length - effectiveBackCount;
 if (isBookendLine) {
 if (!exactEq(work[curIdx], searchLine)) {
+if (exactBookendChars >= minMatchedChars && literalMatched > 0) {
+break;
+}
 blockFailureReason = 'Bookend mismatch';
 break;
 }
 literalMatched++;
 matchedChars += searchLine.length;
+exactBookendChars += searchLine.length;
 simSum += searchLine.length;
 } else {
 const sim = wsEq(work[curIdx], searchLine) ? 1 : (isExactThreshold(effectiveThreshold) ? 0 : similarityAnchor(work[curIdx], searchLine));
@@ -2825,7 +2834,7 @@ lastMatchedPos = curIdx;
 curIdx++;
 patternIdx = j + 1;
 
-if (blockFailureReason === null && matchedChars >= minMatchedChars && literalMatched > 0) {
+if (blockFailureReason === null && exactBookendChars >= minMatchedChars && literalMatched > 0) {
 while (patternIdx < searchLines.length && curIdx <= cappedEnd) {
 const nextSearchLine = searchLines[patternIdx];
 const nextTrimmed = (nextSearchLine || '').trim();
@@ -2834,12 +2843,13 @@ if (isNextWildcard) break;
 if (!exactEq(work[curIdx], nextSearchLine)) break;
 literalMatched++;
 matchedChars += nextSearchLine.length;
+exactBookendChars += nextSearchLine.length;
 simSum += nextSearchLine.length;
 lastMatchedPos = curIdx;
 curIdx++;
 patternIdx++;
 }
-break;
+if (patternIdx >= searchLines.length || !hasWildcardInBlock) break;
 }
 }
 
@@ -2858,11 +2868,11 @@ bestBlockFailureReason = blockFailureReason;
 }
 continue;
 }
-if (matchedChars < minMatchedChars) {
+if (exactBookendChars < minMatchedChars) {
 const partialRate = matchedChars > 0 ? simSum / matchedChars : 0;
 if (partialRate > bestBlockPartialSim) {
 bestBlockPartialSim = partialRate;
-bestBlockFailureReason = `Matched ${matchedChars} chars < ${minMatchedChars}`;
+bestBlockFailureReason = `Exact bookend chars ${exactBookendChars} < ${minMatchedChars}`;
 }
 continue;
 }
@@ -2936,7 +2946,7 @@ for (const m of toApply) {
 const remaining = (m.remainingPatternLines || []).slice();
 const matchedText = work.slice(m.startIdx, m.insertPos).join('\n');
 const replacementText = remaining.join('\n');
-if (isNoOpBlock(matchedText, replacementText) && m.avgSim >= 1) {
+if (remaining.length === 0 && m.avgSim >= 1) {
 usedBlocks.add(bi);
 recordBlockSuccess(bi, m, 0, 0, true);
 continue;
@@ -2962,20 +2972,17 @@ const removeCount = Math.min(remaining.length, Math.max(0, work.length - m.inser
 applyReplacementAndAdjustMarkers(m.insertPos, m.insertPos + removeCount, remaining);
 recordBlockSuccess(bi, m, removeCount, remaining.length);
 } else {
-if (remaining.length === 0) {
-totalApplied++;
+const existing = work.slice(m.insertPos, m.insertPos + remaining.length);
+const overlap = remaining.length > 0 ? lineOverlap(existing, remaining) : 0;
+const toInsert = remaining.slice(overlap);
+if (toInsert.length === 0) {
 usedBlocks.add(bi);
-recordBlockSuccess(bi, m, 0, 0);
+recordBlockSuccess(bi, m, 0, 0, true);
 continue;
 }
-const existing = work.slice(m.insertPos, m.insertPos + remaining.length);
-const overlap = lineOverlap(existing, remaining);
-const toInsert = remaining.slice(overlap);
-if (toInsert.length > 0) {
 work.splice(m.insertPos + overlap, 0, ...toInsert);
 for (const mk of markers) {
 if (mk.pos >= m.insertPos + overlap) mk.pos += toInsert.length;
-}
 }
 recordBlockSuccess(bi, m, 0, toInsert.length);
 }
@@ -3633,8 +3640,12 @@ commitSnapshot();
 
 function applySnapshot(snap) {
 if (!snap) return;
+const cScroll = contentArea ? contentArea.scrollTop : 0;
+const pScroll = patternArea ? patternArea.scrollTop : 0;
 if (contentArea) contentArea.value = snap.content;
 if (patternArea) patternArea.value = snap.rules;
+if (contentArea) contentArea.scrollTop = cScroll;
+if (patternArea) patternArea.scrollTop = pScroll;
 resetOpStats();
 scheduleSaveState();
 updateStats();
@@ -3707,6 +3718,16 @@ stringModeToggle.addEventListener('change', () => { updateStringModeDependencies
 }
 if (stringEllipsisToggle) stringEllipsisToggle.addEventListener('change', updateStats);
 if (wildcardAnchorMin) wildcardAnchorMin.addEventListener('input', updateStats);
+
+document.querySelectorAll('.toggle-wrap').forEach(wrap => {
+  wrap.addEventListener('click', (e) => {
+    const cb = wrap.querySelector('input[type="checkbox"]');
+    if (!cb || cb.disabled) return;
+    if (e.target === cb) return;
+    if (e.target.tagName === 'LABEL' && e.target.htmlFor === cb.id) return;
+    cb.click();
+  });
+});
 }
 
 function setupKeyboardNav(tabs) {
@@ -4441,15 +4462,28 @@ const blockStr = (blk.rawLines || blk.searchLines).join('\n');
 const range = { start: blk.startLine, end: blk.endLine };
 
 if (blockStr.trim().length === 0) {
-reports.push({ bestSimilarity: 0, success: false, failureReason: 'Empty block', applications: 0, searchText: blockStr, range });
+reports.push({ bestSimilarity: 0, success: false, failureReason: 'Search block is blank', applications: 0, searchText: blockStr, range });
 continue;
 }
 
+if (blockStr.length < minMatched) {
+reports.push({ bestSimilarity: 0, success: false, failureReason: `Leading bookend has fewer than ${minMatched} chars`, applications: 0, searchText: blockStr, range });
+continue;
+}
+
+const hasInvisible = INVISIBLE_CHAR_TEST.test(work) || INVISIBLE_CHAR_TEST.test(blockStr);
 let anchorPos = -1;
 let sigLen = 0;
-for (let L = blockStr.length; L >= 1; L--) {
+for (let L = blockStr.length; L >= minMatched; L--) {
 const cand = blockStr.slice(0, L);
-const idx = work.indexOf(cand);
+let idx = -1;
+if (!hasInvisible) {
+idx = work.indexOf(cand);
+} else {
+for (let p = 0; p + L <= work.length; p++) {
+if (exactEq(work.slice(p, p + L), cand)) { idx = p; break; }
+}
+}
 if (idx !== -1) {
 anchorPos = idx;
 sigLen = L;
@@ -4458,11 +4492,11 @@ break;
 }
 
 if (anchorPos === -1) {
-reports.push({ bestSimilarity: 0, success: false, failureReason: 'Signature not found', applications: 0, searchText: blockStr, range });
+reports.push({ bestSimilarity: 0, success: false, failureReason: 'Leading bookend not found', applications: 0, searchText: blockStr, range });
 continue;
 }
 
-while (sigLen < blockStr.length && (anchorPos + sigLen) < work.length && blockStr[sigLen] === work[anchorPos + sigLen]) {
+while (sigLen < blockStr.length && (anchorPos + sigLen) < work.length && (hasInvisible ? exactEq(blockStr[sigLen], work[anchorPos + sigLen]) : blockStr[sigLen] === work[anchorPos + sigLen])) {
 sigLen++;
 }
 
@@ -4475,7 +4509,14 @@ continue;
 }
 
 const insertPos = anchorPos + sigLen;
-work = work.slice(0, insertPos) + replacement + work.slice(insertPos);
+const consume = stringReplacementOverlap(replacement, work.slice(insertPos));
+if (consume >= replacement.length) {
+noOpBlocks.add(bi);
+reports.push({ bestSimilarity: 1, success: true, applications: 0, identicalSkipped: true, searchText: blockStr, range, originalCharCount: 0, replacementCharCount: 0, isStringMode: true });
+continue;
+}
+const toInsert = replacement.slice(consume);
+work = work.slice(0, insertPos) + toInsert + work.slice(insertPos + consume);
 totalApplied++;
 
 usedBlocks.add(bi);
@@ -4486,9 +4527,10 @@ applications: 1,
 searchText: blockStr,
 range,
 originalCharCount: 0,
-replacementCharCount: replacement.length,
+replacementCharCount: toInsert.length,
 isStringMode: true
 });
+continue;
 }
 
 return {
@@ -4596,8 +4638,13 @@ totalApplied = result.totalApplied;
 reports = result.reports;
 lastUsedCount = result.usedCount;
 if (!lockedPattern.checked) {
+const toRemove = new Set();
 const noOps = result.noOpBlocks || new Set();
-const toRemove = applyMultipleMatches ? noOps : (result.usedBlocks || new Set());
+for (const x of noOps) toRemove.add(x);
+if (!applyMultipleMatches) {
+const usedBlocks = result.usedBlocks || new Set();
+for (const x of usedBlocks) toRemove.add(x);
+}
 if (toRemove.size > 0) {
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepStr);
 const newBlocks = allBlocks.filter((_, idx) => !toRemove.has(idx));
@@ -4618,12 +4665,10 @@ totalApplied = result.totalApplied;
 reports = result.reports;
 lastUsedCount = result.usedCount;
 if (result.patterns || (result.skippedRanges && result.skippedRanges.length > 0)) {
-const keepUsedRules = applyMultipleMatches;
 const usedToRemove = new Set();
-if (keepUsedRules) {
 const noOps = result.noOpPatterns || new Set();
 for (const pi of noOps) usedToRemove.add(pi);
-} else {
+if (!applyMultipleMatches) {
 const used = result.usedPatterns || new Set();
 for (const pi of used) usedToRemove.add(pi);
 }
@@ -4651,8 +4696,13 @@ totalApplied = result.totalApplied;
 reports = result.reports;
 lastUsedCount = result.usedCount;
 if (!lockedPattern.checked) {
+const toRemove = new Set();
 const noOps = result.noOpBlocks || new Set();
-const toRemove = applyMultipleMatches ? noOps : (result.usedBlocks || new Set());
+for (const x of noOps) toRemove.add(x);
+if (!applyMultipleMatches) {
+const usedBlocks = result.usedBlocks || new Set();
+for (const x of usedBlocks) toRemove.add(x);
+}
 if (toRemove.size > 0) {
 const sepVal = (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%';
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
