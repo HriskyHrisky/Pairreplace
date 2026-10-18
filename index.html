@@ -115,7 +115,7 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <div class="toggle-wrap child-toggle" id="wildcardAnchorWrap">
 <label for="wildcardAnchorMin" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:500;">
 <span>Anchor min chars:</span>
-<input type="number" id="wildcardAnchorMin" value="1" min="1" max="99" style="width:56px;padding:2px 6px;border:1.5px solid #d1d9e6;font-size:13px;font-family:'JetBrains Mono',monospace;" aria-label="Minimum chars for a wildcard anchor line" />
+<input type="number" id="wildcardAnchorMin" value="1" min="1" max="9999" style="width:56px;padding:2px 6px;border:1.5px solid #d1d9e6;font-size:13px;font-family:'JetBrains Mono',monospace;" aria-label="Minimum chars for a wildcard anchor line" />
 </label>
 </div>
 </div>
@@ -151,8 +151,8 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <div class="toggle-group">
 <span class="group-title">STRING FIND &amp; REPLACE</span>
 <div class="toggle-wrap" id="stringModeWrap">
-<input type="checkbox" id="stringModeToggle" title="When ON, rules are treated as literal strings and replaced globally (not line-based). Use 100% similarity for short strings to ensure correctness." />
-<label for="stringModeToggle">Find &amp; replace (string-based)</label>
+<input type="checkbox" id="stringModeToggle" title="Off by default. When ON, rules are treated as literal strings and replaced globally (not line-based). Use 100% similarity for short strings to ensure correctness." />
+<label for="stringModeToggle">string-based (default off)</label>
 </div>
 <div class="toggle-wrap child-toggle" id="stringEllipsisWrap">
 <input type="checkbox" id="stringEllipsisToggle" title="When ON, … / …
@@ -197,10 +197,10 @@ Mode 2 · Block matching
 </div>
 </div>
 <div id="mode1Controls" class="mode-controls">
-<div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace"/></label></div>
+<div class="group"><label>Separator: <input type="text" id="separatorInput" value="replace"/><small style="font-size:12px;color:#64748b;margin-left:6px;font-weight:400;">💡 Separator alone defines a search/replace pair — no codeblocks needed.</small></label></div>
 </div>
 <div id="mode2Controls" class="mode-controls hidden">
-<div class="group"><label>Separator: <input type="text" id="mode2SeparatorInput" value="%%%" /></label></div>
+<div class="group"><label>Separator: <input type="text" id="mode2SeparatorInput" value="%%%" /><small style="font-size:12px;color:#64748b;margin-left:6px;font-weight:400;">💡 Blocks split by this — no codeblocks ever needed.</small></label></div>
 <div class="group"><label>Min matched chars: <input type="number" id="mode2Threshold" value="80" min="1" max="9999" aria-label="Minimum matched chars for Mode 2" /></label></div>
 </div>
 <div class="mode-hint" id="modeHint">
@@ -321,7 +321,7 @@ const CODE_FENCE_RE = /^\s*(`{3,}|~{3,})/;
 const hasFenceLine = (searchLines) => searchLines.some(l => CODE_FENCE_RE.test(l));
 const STAGE_ORDER = ['exact', 'fuzzy'];
 const MODE1_HINT = 'Mode 1: Search block must match; replacement lines are applied in order.';
-const MODE2_HINT = 'Mode 2: Blocks separated by separator or blank lines; remaining lines replace matched lines.';
+const MODE2_HINT = 'Mode 2: Each block is both search and replace; blocks separated by Mode 2 separator only (default %%%).';
 function mkWildcard(extra) {
 return Object.assign({ type: 'wildcard', greedy: false }, extra || {});
 }
@@ -1224,15 +1224,18 @@ let cursorCol = startCol;
 let captured = [];
 let measuredSum = 0;
 
+const bookendSet = Array.isArray(skipItemIndices) ? new Set(skipItemIndices) : null;
+
 let totalPatternChars = 0;
-for (const it of items) totalPatternChars += patternItemChars(it);
-const rate = () => (totalPatternChars > 0 ? measuredSum / totalPatternChars : 0);
+for (let idx = 0; idx < items.length; idx++) {
+if (bookendSet !== null && bookendSet.has(idx)) continue;
+totalPatternChars += patternItemChars(items[idx]);
+}
+const rate = () => (totalPatternChars > 0 ? measuredSum / totalPatternChars : (items.length > 0 ? 1 : 0));
 
 const bump = (sim, chars) => {
 if (chars > 0) measuredSum += sim * chars;
 };
-
-const bookendSet = Array.isArray(skipItemIndices) ? new Set(skipItemIndices) : null;
 
 for (let i = 0; i < items.length; i++) {
 const item = items[i];
@@ -1288,9 +1291,8 @@ const chars = patternItemChars(item);
 
 if (isBookend) {
 if (!exactEq(sourceBlock, patternBlock)) {
-return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
+return { success: false, bestSim: rate(), failureReason: 'Bookend mismatch' };
 }
-bump(1, chars);
 } else {
 const blockSim = wsEq(sourceBlock, patternBlock) ? 1 : (isExactThreshold(threshold) ? 0 : similarityAnchor(sourceBlock, patternBlock));
 bump(blockSim, chars);
@@ -1327,15 +1329,14 @@ const lastTok = toks[toks.length - 1];
 const normed = stripInvisibleChars(norm(result.matchText));
 if (firstTok && firstTok.type === 'literal' && (firstTok.text || '').length > 0) {
 if (!normed.startsWith(stripInvisibleChars(norm(firstTok.text)))) {
-return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
+return { success: false, bestSim: rate(), failureReason: 'Bookend mismatch' };
 }
 }
 if (lastTok && lastTok.type === 'literal' && (lastTok.text || '').length > 0) {
 if (!normed.endsWith(stripInvisibleChars(norm(lastTok.text)))) {
-return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
+return { success: false, bestSim: rate(), failureReason: 'Bookend mismatch' };
 }
 }
-bump(1, chars);
 } else {
 bump(result.sim, chars);
 }
@@ -1877,8 +1878,16 @@ const patterns = [];
 const seenPairKeys = new Set();
 for (const pat of allParsedPatterns) {
 const searchNorm = pat.searchLines.map(l => algoNorm(l)).join('\n');
-const replNorm = (pat.rawReplLines || []).map(l => algoNorm(l)).join('\n');
+const replNorm = (pat.rawReplLines || pat.replLines || []).map(l => algoNorm(l)).join('\n');
 const pairKey = searchNorm + '\u0000' + replNorm;
+
+// Self-identical pair: ...
+if (searchNorm === replNorm) {
+const { searchStart, replEnd } = pat.lineIndices;
+duplicateRanges.push({ start: searchStart, end: replEnd });
+continue;
+}
+
 if (seenPairKeys.has(pairKey)) {
 const { searchStart, replEnd } = pat.lineIndices;
 duplicateRanges.push({ start: searchStart, end: replEnd });
@@ -1890,7 +1899,7 @@ patterns.push(pat);
 
 if (!patterns || patterns.length === 0) {
 const skipMsg = duplicateRanges.length > 0
-? `🗑️ ${duplicateRanges.length} duplicate pair(s) deleted · No valid patterns remain.`
+? `🗑️ ${duplicateRanges.length} redundant pair(s) deleted · No valid patterns remain.`
 : 'No valid patterns found. Check fences and separator.';
 if (showStatus) showStatus(skipMsg, 'warning');
 if (updateStats) updateStats();
@@ -1944,6 +1953,7 @@ function recordSuccess(pi, match, replacementLineCount, isNoOp = false) {
 const o = patternOutcome.get(pi) || { success: false, applications: 0, bestSimilarity: 0, totalOriginalLines: 0, totalReplacementLines: 0, failureReasons: [] };
 o.success = true;
 if (!isNoOp) o.applications++;
+if (isNoOp) o.identicalSkipped = true;
 o.bestSimilarity = Math.max(o.bestSimilarity, match.avgSim || 0);
 o.totalOriginalLines += Math.max(0, (match.end || 0) - (match.start || 0));
 o.totalReplacementLines += Math.max(0, replacementLineCount || 0);
@@ -2388,7 +2398,7 @@ skippedCount: duplicateRanges.length
 
 async function ReplaceMode2(contentRaw, rules, threshold, greedy, applyMultipleMatches, signal, showStatus, updateStats) {
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
-const blocks = parseMode2Blocks(norm(rules).split('\n'), mode2SeparatorInput ? mode2SeparatorInput.value : '%%%');
+const blocks = parseMode2Blocks(norm(rules).split('\n'), (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%');
 if (blocks.length === 0) {
 if (showStatus) showStatus('No valid blocks found. Use separator or blank line to separate blocks.', 'warning');
 return { newContent: contentRaw, totalApplied: 0, reports: [], usedCount: 0, usedBlocks: new Set(), noOpBlocks: new Set() };
@@ -2457,6 +2467,7 @@ function recordBlockSuccess(bi, match, removeCount, addedCount, isNoOp = false) 
 const o = blockOutcome.get(bi) || { success: false, bestSimilarity: 0, originalLineCount: 0, replacementLineCount: 0, applications: 0, failureReasons: [] };
 o.success = true;
 if (!isNoOp) o.applications = (o.applications || 0) + 1;
+if (isNoOp) o.identicalSkipped = true;
 o.bestSimilarity = Math.max(o.bestSimilarity, match.avgSim || 0);
 o.originalLineCount += (removeCount || 0);
 o.replacementLineCount += (addedCount || 0);
@@ -2559,11 +2570,13 @@ if (ellipsisWildcardEnabled && (t === '…' || t === '...')) break;
 if (ellipsisWildcardEnabled && findFreeStandingEllipsisRuns(searchLines[i]).length > 0) break;
 bookendBackCount++;
 }
-const hasWildcardInBlock = findFreeStandingEllipsisRuns(searchLines.join('\n')).length > 0
-|| searchLines.some(l => { const t = (l||'').trim(); return t === '...' || t === '…'; });
+const hasWildcardInBlock = ellipsisWildcardEnabled && (
+findFreeStandingEllipsisRuns(searchLines.join('\n')).length > 0
+|| searchLines.some(l => { const t = (l||'').trim(); return t === '...' || t === '…'; })
+);
 const effectiveFrontCount = hasWildcardInBlock
 ? (blockWindowDepth ? Math.min(bookendFrontCount, blockWindowDepth.frontDepth) : bookendFrontCount)
-: bookendFrontCount;
+: 1;
 const effectiveBackCount = hasWildcardInBlock
 ? (blockWindowDepth ? Math.min(bookendBackCount, blockWindowDepth.backDepth) : bookendBackCount)
 : 0;
@@ -2602,7 +2615,18 @@ n++;
 return n;
 })();
 let signatureCharCount = 0;
-for (let k = 0; k < signatureLiteralCount; k++) signatureCharCount += (searchLines[k] || '').length;
+{
+let counted = 0;
+for (const l of searchLines) {
+const t = (l || '').trim();
+if (t === '') continue;
+if (t === '…' || t === '...') break;
+if (findFreeStandingEllipsisRuns(l).length > 0) break;
+signatureCharCount += l.length;
+counted++;
+if (counted >= signatureLiteralCount) break;
+}
+}
 if (signatureCharCount < minMatchedChars) {
 recordBlockFailure(bi, `Signature has fewer than ${minMatchedChars} chars`, 0);
 return false;
@@ -2680,7 +2704,7 @@ let lastMatchedPos = i - 1;
 let patternIdx = 0;
 const consumedRanges = [];
 let blockFailureReason = null;
-const wildcardAnchorN = Math.max(1, parseInt((wildcardAnchorMin && wildcardAnchorMin.value) || 1, 10) || 1);
+const wildcardAnchorN = Math.max(1, minMatchedChars);
 if (i < 0 || i >= work.length) continue;
 for (let j = 0; j < searchLines.length && curIdx <= cappedEnd; j++) {
 const searchLine = searchLines[j];
@@ -2778,13 +2802,17 @@ patternIdx = nlj;
 j = nlj - 1;
 continue;
 }
-const sim = wsEq(work[curIdx], searchLine) ? 1 : (isExactThreshold(effectiveThreshold) ? 0 : similarityAnchor(work[curIdx], searchLine));
 const isBookendLine = j < effectiveFrontCount || j >= searchLines.length - effectiveBackCount;
 if (isBookendLine) {
-if (!exactEq(work[curIdx], searchLine)) { blockFailureReason = 'Bookend mismatch'; break; }
+if (!exactEq(work[curIdx], searchLine)) {
+blockFailureReason = 'Bookend mismatch';
+break;
+}
 literalMatched++;
 matchedChars += searchLine.length;
+simSum += searchLine.length;
 } else {
+const sim = wsEq(work[curIdx], searchLine) ? 1 : (isExactThreshold(effectiveThreshold) ? 0 : similarityAnchor(work[curIdx], searchLine));
 if (sim < effectiveThreshold) {
 if (blockFailureReason === null) blockFailureReason = 'Line similarity below threshold';
 break;
@@ -2796,20 +2824,26 @@ literalMatched++;
 lastMatchedPos = curIdx;
 curIdx++;
 patternIdx = j + 1;
+
+if (blockFailureReason === null && matchedChars >= minMatchedChars && literalMatched > 0) {
+while (patternIdx < searchLines.length && curIdx <= cappedEnd) {
+const nextSearchLine = searchLines[patternIdx];
+const nextTrimmed = (nextSearchLine || '').trim();
+const isNextWildcard = ellipsisWildcardEnabled && (nextTrimmed === '…' || nextTrimmed === '...');
+if (isNextWildcard) break;
+if (!exactEq(work[curIdx], nextSearchLine)) break;
+literalMatched++;
+matchedChars += nextSearchLine.length;
+simSum += nextSearchLine.length;
+lastMatchedPos = curIdx;
+curIdx++;
+patternIdx++;
 }
-if (blockFailureReason === null && patternIdx < searchLines.length) {
-const unprocessed = searchLines.slice(patternIdx);
-const hasLiteralLeft = unprocessed.some(l => {
-const t = (l || '').trim();
-if (t.length === 0) return false;
-if (t === '…' || t === '...') return false;
-if (findFreeStandingEllipsisRuns(l).length > 0) return false;
-return true;
-});
-if (hasLiteralLeft) {
-blockFailureReason = 'Pattern truncated by content end';
+break;
 }
 }
+
+// ── Evaluated once per starting position, after the inner loop exits ──
 if (blockFailureReason !== null) {
 if (blockFailureReason === 'Bookend mismatch') {
 if (bestBlockPartialSim === 0 && bestBlockFailureReason === null) {
@@ -2934,11 +2968,16 @@ usedBlocks.add(bi);
 recordBlockSuccess(bi, m, 0, 0);
 continue;
 }
-work.splice(m.insertPos, 0, ...remaining);
+const existing = work.slice(m.insertPos, m.insertPos + remaining.length);
+const overlap = lineOverlap(existing, remaining);
+const toInsert = remaining.slice(overlap);
+if (toInsert.length > 0) {
+work.splice(m.insertPos + overlap, 0, ...toInsert);
 for (const mk of markers) {
-if (mk.pos >= m.insertPos) mk.pos += remaining.length;
+if (mk.pos >= m.insertPos + overlap) mk.pos += toInsert.length;
 }
-recordBlockSuccess(bi, m, 0, remaining.length);
+}
+recordBlockSuccess(bi, m, 0, toInsert.length);
 }
 totalApplied++;
 usedBlocks.add(bi);
@@ -3037,9 +3076,21 @@ runsUsed: runCount
 };
 }
 
+function lineOverlap(existingLines, incomingLines) {
+const max = Math.min(existingLines.length, incomingLines.length);
+for (let k = max; k > 0; k--) {
+let allMatch = true;
+for (let i = 0; i < k; i++) {
+if (!exactEq(existingLines[i], incomingLines[i])) { allMatch = false; break; }
+}
+if (allMatch) return k;
+}
+return 0;
+}
+
 function parseMode2Blocks(lines, separator) {
 const blocks = [];
-const sep = String(separator ?? '');
+const sep = String(separator ?? '%%%').trim() || '%%%';
 let current = [];
 let currentStart = -1;
 for (let i = 0; i < lines.length; i++) {
@@ -3173,12 +3224,25 @@ i++;
 }
 }
 if (patterns.length === 0) {
+// Only use the "split at separator" fallback when the textarea contains
+// no fences at all. If fences are present, the fenced parse above is
+// authoritative: a failed fence parse means malformed rules, not license
+// to reinterpret the whole textarea. Without this gate, a separator word
+// appearing inside a fenced block produces a spurious match.
+const hasAnyFence = lines.some(l => FENCE_LINE_RE.test(l));
+if (!hasAnyFence) {
 const sepIdx = lines.findIndex(line => isSeparatorLine(line, sep));
 if (sepIdx !== -1) {
 const searchLines = lines.slice(0, sepIdx).map(l => stripInvisibleChars(l));
 const replLines = lines.slice(sepIdx + 1);
 if (searchLines.some(l => l.trim().length > 0) && replLines.some(l => l.trim().length > 0)) {
-patterns.push({ searchLines, replLines: replLines.slice(), lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 } });
+patterns.push({
+searchLines,
+replLines: replLines.slice(),
+rawReplLines: replLines.slice(),
+lineIndices: { searchStart: 0, sepIdx, replEnd: lines.length - 1 }
+});
+}
 }
 }
 }
@@ -3394,7 +3458,7 @@ if (mode2BlockCount) mode2BlockCount.classList.add('hidden');
 } else {
 if (mode1Stats) mode1Stats.classList.add('hidden');
 const thresh = parseInt((mode2Threshold && mode2Threshold.value) || 80, 10);
-const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value : '%%%';
+const sepVal = (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%';
 const safeThresh = Number.isFinite(thresh) ? thresh : 80;
 const cacheKey = `${currentMode}:${rules}:${safeThresh}:${sepVal}`;
 if (cachedMode2Stats.cacheKey !== cacheKey) {
@@ -3441,9 +3505,11 @@ updateStringModeDependencies();
 function updateStringModeDependencies() {
 if (!stringModeToggle) return;
 const on = stringModeToggle.checked;
-if (stringEllipsisToggle) stringEllipsisToggle.disabled = !on;
-if (!on && stringEllipsisToggle) stringEllipsisToggle.checked = false;
-if (stringEllipsisWrap) { stringEllipsisWrap.style.opacity = on ? '1' : '0.4'; stringEllipsisWrap.style.pointerEvents = on ? 'auto' : 'none'; }
+const wildcardOn = !!(ellipsisWildcard && ellipsisWildcard.checked);
+const canUseWildcards = on && wildcardOn;
+if (stringEllipsisToggle) stringEllipsisToggle.disabled = !canUseWildcards;
+if (!canUseWildcards && stringEllipsisToggle) stringEllipsisToggle.checked = false;
+if (stringEllipsisWrap) { stringEllipsisWrap.style.opacity = canUseWildcards ? '1' : '0.4'; stringEllipsisWrap.style.pointerEvents = canUseWildcards ? 'auto' : 'none'; }
 }
 
 function resetOpStats() {
@@ -3966,6 +4032,22 @@ out += escaped.slice(cursor);
 return out.split(LIT_DOTS).join('...').split(LIT_ELL).join('…');
 }
 
+function stringReplacementOverlap(replacement, following) {
+let max = Math.min(replacement.length, following.length);
+for (let k = max; k > 0; k--) {
+if (replacement.slice(replacement.length - k) === following.slice(0, k)) return k;
+}
+return 0;
+}
+
+function applyStringReplacementAt(work, start, end, replacement) {
+const before = work.slice(0, start);
+const after = work.slice(end);
+const consume = stringReplacementOverlap(replacement, after);
+const nextWork = before + replacement + after.slice(consume);
+return { work: nextWork, nextPos: start + replacement.length, consumed: consume };
+}
+
 function findCharAnchorHits(work, anchor, fromPos) {
 const hits = [];
 const aLen = anchor.length;
@@ -4069,7 +4151,7 @@ for (let j = lo; j < end; j++) {
 const bh = backHits[j];
 const middle = work.slice(fh.end, bh.start);
 const midSim = middleSimilarity(middle);
-const rate = (frontLen + midSim * mpl + backLen) / sLen;
+const rate = midSim;
 
 if (rate < threshold) {
 if (rate > bestRejectedSim) {
@@ -4118,6 +4200,14 @@ const searchStr = pat.searchLines.join('\n');
 const replStr = (pat.replLines || []).join('\n');
 const k = searchStr + '\u0000' + replStr;
 if (searchStr.length === 0) continue;
+
+// Self-identical pair: search string == replacement string. Delete
+// unconditionally, regardless of length.
+if (algoNorm(searchStr) === algoNorm(replStr)) {
+if (pat.lineIndices) duplicateRanges.push({ start: pat.lineIndices.searchStart, end: pat.lineIndices.replEnd });
+continue;
+}
+
 if (seen.has(k)) {
 if (pat.lineIndices) duplicateRanges.push({ start: pat.lineIndices.searchStart, end: pat.lineIndices.replEnd });
 continue;
@@ -4326,6 +4416,93 @@ skippedCount: duplicateRanges.length
 };
 }
 
+async function ReplaceStringMode2(content, rules, sep, allowEllipsis, threshold, applyMultipleMatches, signal, showStatus) {
+const blocks = parseMode2Blocks(norm(rules).split('\n'), sep);
+if (blocks.length === 0) {
+return { newContent: content, totalApplied: 0, reports: [], usedCount: 0, usedBlocks: new Set(), noOpBlocks: new Set() };
+}
+
+const minMatched = Math.max(1, parseInt((mode2Threshold && mode2Threshold.value) || 80, 10));
+
+let work = stripInvisibleChars(content);
+let totalApplied = 0;
+const usedBlocks = new Set();
+const noOpBlocks = new Set();
+const reports = [];
+
+const abortIfCancelled = () => {
+if (signal?.aborted) throw new Error('Operation cancelled');
+};
+
+for (let bi = 0; bi < blocks.length; bi++) {
+abortIfCancelled();
+const blk = blocks[bi];
+const blockStr = (blk.rawLines || blk.searchLines).join('\n');
+const range = { start: blk.startLine, end: blk.endLine };
+
+if (blockStr.trim().length === 0) {
+reports.push({ bestSimilarity: 0, success: false, failureReason: 'Empty block', applications: 0, searchText: blockStr, range });
+continue;
+}
+
+let anchorPos = -1;
+let sigLen = 0;
+for (let L = blockStr.length; L >= 1; L--) {
+const cand = blockStr.slice(0, L);
+const idx = work.indexOf(cand);
+if (idx !== -1) {
+anchorPos = idx;
+sigLen = L;
+break;
+}
+}
+
+if (anchorPos === -1) {
+reports.push({ bestSimilarity: 0, success: false, failureReason: 'Signature not found', applications: 0, searchText: blockStr, range });
+continue;
+}
+
+while (sigLen < blockStr.length && (anchorPos + sigLen) < work.length && blockStr[sigLen] === work[anchorPos + sigLen]) {
+sigLen++;
+}
+
+const replacement = blockStr.slice(sigLen);
+
+if (replacement.length === 0) {
+noOpBlocks.add(bi);
+reports.push({ bestSimilarity: 1, success: true, applications: 0, identicalSkipped: true, searchText: blockStr, range, originalCharCount: 0, replacementCharCount: 0, isStringMode: true });
+continue;
+}
+
+const insertPos = anchorPos + sigLen;
+work = work.slice(0, insertPos) + replacement + work.slice(insertPos);
+totalApplied++;
+
+usedBlocks.add(bi);
+reports.push({
+bestSimilarity: 1,
+success: true,
+applications: 1,
+searchText: blockStr,
+range,
+originalCharCount: 0,
+replacementCharCount: replacement.length,
+isStringMode: true
+});
+}
+
+return {
+newContent: work,
+totalApplied,
+reports,
+usedCount: usedBlocks.size,
+usedBlocks,
+noOpBlocks,
+skippedRanges: [],
+skippedCount: 0
+};
+}
+
 async function Replace() {
 if (replaceInProgress) {
 if (abortController) abortController.abort();
@@ -4374,7 +4551,8 @@ let totalApplied = 0;
 try {
 let result = null;
 if (stringModeToggle && stringModeToggle.checked) {
-const allowEllipsis = stringEllipsisToggle ? stringEllipsisToggle.checked : false;
+const allowEllipsis = !!(ellipsisWildcard && ellipsisWildcard.checked && stringEllipsisToggle && stringEllipsisToggle.checked);
+if (currentMode === 1) {
 const sepStr = separatorInput ? separatorInput.value.trim() : '';
 result = await ReplaceString(content, rules, sepStr, allowEllipsis, similarityThreshold, applyMultipleMatches, signal, showStatus);
 newContent = result.newContent;
@@ -4398,7 +4576,7 @@ originalRawRules,
 result.patterns || [],
 usedToRemove,
 lockedPattern ? lockedPattern.checked : false,
-keepUsedRules ? [] : result.skippedRanges
+result.skippedRanges || []
 );
 if (oldToNew) {
 for (const r of reports) {
@@ -4409,6 +4587,29 @@ r.range.end = oldToNew[r.range.end] >= 0 ? oldToNew[r.range.end] : r.range.start
 }
 }
 updateStats();
+}
+} else {
+const sepStr = (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%';
+result = await ReplaceStringMode2(content, rules, sepStr, allowEllipsis, similarityThreshold, applyMultipleMatches, signal, showStatus);
+newContent = result.newContent;
+totalApplied = result.totalApplied;
+reports = result.reports;
+lastUsedCount = result.usedCount;
+if (!lockedPattern.checked) {
+const noOps = result.noOpBlocks || new Set();
+const toRemove = applyMultipleMatches ? noOps : (result.usedBlocks || new Set());
+if (toRemove.size > 0) {
+const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepStr);
+const newBlocks = allBlocks.filter((_, idx) => !toRemove.has(idx));
+const parts = newBlocks.map((b, i) => {
+const body = (b.rawLines || b.searchLines).join('\n');
+if (b.sepAfter) return body + '\n' + b.sepAfter;
+return i < newBlocks.length - 1 ? body + '\n' + sepStr : body;
+});
+patternArea.value = parts.join('\n');
+updateStats();
+}
+}
 }
 } else if (currentMode === 1) {
 result = await ReplaceMode1(content, rules, similarityThreshold, greedy, applyMultipleMatches, signal, showStatus, updateStats);
@@ -4431,7 +4632,7 @@ originalRawRules,
 result.patterns || [],
 usedToRemove,
 lockedPattern ? lockedPattern.checked : false,
-keepUsedRules ? [] : result.skippedRanges
+result.skippedRanges || []
 );
 if (oldToNew) {
 for (const r of reports) {
@@ -4453,7 +4654,7 @@ if (!lockedPattern.checked) {
 const noOps = result.noOpBlocks || new Set();
 const toRemove = applyMultipleMatches ? noOps : (result.usedBlocks || new Set());
 if (toRemove.size > 0) {
-const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value.trim() : '%%%';
+const sepVal = (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%';
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
 const newBlocks = allBlocks.filter((_, idx) => !toRemove.has(idx));
 const parts = newBlocks.map((b, i) => {
@@ -4480,11 +4681,11 @@ renderReport(reports, similarityThreshold);
 if (matchDetails) matchDetails.classList.remove('hidden');
 
 const runsUsed = result && typeof result.runsUsed === 'number' ? result.runsUsed : 0;
-const skippedCount = (currentMode === 1 && result && typeof result.skippedCount === 'number') ? result.skippedCount : 0;
+const skippedCount = (result && typeof result.skippedCount === 'number') ? result.skippedCount : 0;
 let msg = '';
 if (totalApplied > 0) msg = `✅ ${totalApplied} pattern(s) applied · ${runsUsed} run(s).`;
 else msg = 'No result';
-if (skippedCount > 0 && !applyMultipleMatches) msg += ` · 🗑️ ${skippedCount} identical pair(s) deleted`;
+if (skippedCount > 0) msg += ` · 🗑️ ${skippedCount} redundant pair(s) deleted`;
 showStatus(msg, totalApplied > 0 ? 'info' : 'warning');
 } catch (err) {
 console.error(err);
@@ -4502,12 +4703,12 @@ originalRawRules,
 partialReplaceSnapshot.patterns,
 applyMultipleMatches ? new Set() : (partialReplaceSnapshot.usedPatterns || new Set()),
 lockedPattern ? lockedPattern.checked : false,
-applyMultipleMatches ? [] : partialReplaceSnapshot.skippedRanges
+partialReplaceSnapshot.skippedRanges || []
 );
 updateStats();
 } else if (partialReplaceSnapshot && partialReplaceSnapshot.totalApplied > 0 && currentMode === 2 && partialReplaceSnapshot.usedBlocks) {
 if (!applyMultipleMatches) {
-const sepVal = mode2SeparatorInput ? mode2SeparatorInput.value.trim() : '%%%';
+const sepVal = (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%';
 const allBlocks = parseMode2Blocks(norm(originalRawRules).split('\n'), sepVal);
 const newBlocks = allBlocks.filter((_, idx) => !partialReplaceSnapshot.usedBlocks.has(idx));
 const parts = newBlocks.map((b, i) => {
