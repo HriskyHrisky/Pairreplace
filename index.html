@@ -27,7 +27,7 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 .mode-tab.active { background: #fff; color: #0f172a; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
 .textarea-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 14px; }
 .textarea-box { display: flex; flex-direction: column; }
-.textarea-box label { font-size: 14px; font-weight: 600; margin-bottom: 5px; color: #1e293b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+.textarea-box label { font-size: 14px; font-weight: 600; margin-bottom: 5px; color: #1e293b; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .textarea-box label .pattern-extras { font-weight: 400; font-size: 13px; color: #64748b; background: #f1f5f9; padding: 1px 12px; white-space: nowrap; }
 .pattern-line-badge { font-size: 13px; font-weight: 500; color: #334155; background: #eef2ff; padding: 1px 12px; white-space: nowrap; }
 .textarea-box textarea { flex: 1 1 auto; height: 170px; min-height: 80px; padding: 12px 16px; border: 1.5px solid #d1d9e6; font-size: 14px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical; transition: border 0.15s; background: #fafbfc; color: #0f172a; tab-size: 2; scrollbar-gutter: stable; }
@@ -57,6 +57,9 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 .btn-danger { background: #dc2626; color: #fff; }
 .btn-danger:hover { background: #b91c1c; }
 .action-group { display: flex; gap: 4px; }
+.save-slot-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.btn-slot { padding: 4px 10px; font-size: 13px; line-height: 1; min-width: 32px; }
+.slot-indicator { font-size: 13px; font-weight: 600; color: #334155; padding: 2px 10px; background: #eef2ff; border: 1px solid #d1d9e6; min-width: 44px; text-align: center; }
 .popper { position: fixed; top: 0; left: 0; z-index: 1000; background: #fff; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); border: 1px solid #e2e8f0; padding: 16px 18px; min-width: 260px; max-width: 320px; display: none; }
 .popper.open { display: block; }
 .popper-arrow { position: absolute; width: 10px; height: 10px; background: #fff; border-left: 1px solid #e2e8f0; border-top: 1px solid #e2e8f0; transform: rotate(45deg); top: -6px; left: 20px; }
@@ -102,8 +105,7 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <span class="group-title">ELLIPSIS WILDCARD</span>
 <div class="toggle-wrap" id="ellipsisWildcardWrap">
 <input type="checkbox" id="ellipsisWildcard" />
-<label for="ellipsisWildcard">Enable … / …
-... as wildcard</label>
+<label for="ellipsisWildcard">Enable … / ... as wildcard</label>
 </div>
 <div class="toggle-wrap child-toggle" id="greedyEllipsisWrap">
 <input type="checkbox" id="greedyEllipsis" title="If ON, tries to match as many lines as possible (last valid anchor). If OFF, matches as few as possible (first valid anchor)." />
@@ -156,8 +158,7 @@ h1 small { font-size: 14px; font-weight: 400; color: #64748b; }
 <label for="stringModeToggle">String-based</label>
 </div>
 <div class="toggle-wrap child-toggle" id="stringEllipsisWrap">
-<input type="checkbox" id="stringEllipsisToggle" title="When ON, … / …
-... act as wildcards in string mode. Similarity threshold is ignored for string wildcards." />
+<input type="checkbox" id="stringEllipsisToggle" title="When ON, … / ... act as wildcards in string mode. Similarity threshold is ignored for string wildcards." />
 <label for="stringEllipsisToggle">Allow ellipsis wildcards (string-based)</label>
 </div>
 <div class="global-item" style="margin-top:6px;">
@@ -194,6 +195,11 @@ Mode 2 · Block matching
 <span class="stat-badge" title="Actual Applied − Unique patterns (greater than 0 only when Apply once is OFF)">Ambiguity: <span id="usedRules">0</span></span>
 <span id="mode1Stats" class="stat-badge">Valid: <span id="patternValid">0</span> / Potential: <span id="patternPotential">0</span></span>
 <span id="mode2BlockCount" class="stat-badge hidden">Blocks: <span id="blockCountVal">0</span></span>
+</div>
+<div class="save-slot-row">
+<button type="button" class="btn btn-outline btn-slot" id="slotPrevBtn" aria-label="Previous content slot">◀</button>
+<span class="slot-indicator" id="slotIndicator">1/1</span>
+<button type="button" class="btn btn-outline btn-slot" id="slotNextBtn" aria-label="Next content slot">▶</button>
 </div>
 </div>
 </div>
@@ -248,6 +254,11 @@ Mode 2 · Block matching
 <div class="textarea-box">
 <label for="parkingArea">Parking</label>
 <textarea id="parkingArea" placeholder="Saved manually via browser, not tracked or affected by any button" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+<div class="save-slot-row">
+<button type="button" class="btn btn-outline btn-slot" id="parkingSlotPrevBtn" aria-label="Previous parking slot">◀</button>
+<span class="slot-indicator" id="parkingSlotIndicator">1/1</span>
+<button type="button" class="btn btn-outline btn-slot" id="parkingSlotNextBtn" aria-label="Next parking slot">▶</button>
+</div>
 </div>
 </div>
 </div>
@@ -311,6 +322,10 @@ let lineWildcardEnabled = false;
 let showMarkers = false;
 let abortController = null;
 let statusTimeout = null;
+let contentSlots = [''];
+let contentSlotIndex = 0;
+let parkingSlots = [''];
+let parkingSlotIndex = 0;
 
 const undoStack = [];
 const redoStack = [];
@@ -526,9 +541,13 @@ continue;
 const candidates = indexB.get(wA.text);
 let found = -1;
 if (candidates) {
-for (const j of candidates) {
-if (j >= bCursor) { found = j; break; }
+let lo = 0, hi = candidates.length;
+while (lo < hi) {
+const mid = (lo + hi) >>> 1;
+if (candidates[mid] < bCursor) lo = mid + 1;
+else hi = mid;
 }
+if (lo < candidates.length) found = candidates[lo];
 }
 if (found >= 0) {
 exact += lenA;
@@ -550,15 +569,20 @@ if (pendingStart !== -1) unresolvedSpans.push({ aStart: pendingStart, aEnd: pend
 for (const span of unresolvedSpans) {
 const spanText = strA.slice(span.aStart, span.aEnd);
 if (spanText.length === 0) continue;
-let anchorBefore = null;
-for (const p of anchorPairs) {
-if (p.aStart < span.aStart) anchorBefore = p;
-else break;
+let beforeLo = 0, beforeHi = anchorPairs.length;
+while (beforeLo < beforeHi) {
+const mid = (beforeLo + beforeHi) >>> 1;
+if (anchorPairs[mid].aStart < span.aStart) beforeLo = mid + 1;
+else beforeHi = mid;
 }
-let anchorAfter = null;
-for (const p of anchorPairs) {
-if (p.aStart >= span.aEnd) { anchorAfter = p; break; }
+let anchorBefore = beforeLo > 0 ? anchorPairs[beforeLo - 1] : null;
+let afterLo = beforeLo, afterHi = anchorPairs.length;
+while (afterLo < afterHi) {
+const mid = (afterLo + afterHi) >>> 1;
+if (anchorPairs[mid].aStart < span.aEnd) afterLo = mid + 1;
+else afterHi = mid;
 }
+let anchorAfter = afterLo < anchorPairs.length ? anchorPairs[afterLo] : null;
 let bStart, bEnd;
 if (anchorBefore && anchorAfter) {
 bStart = anchorBefore.bEnd;
@@ -813,7 +837,6 @@ return { items };
 
 
 
-const LITERAL_WS_RE = /\s+/g;
 
 function findLiteralTolerant(text, startPos, literal, greedy = false) {
 const idx = greedy ? text.lastIndexOf(literal) : text.indexOf(literal, startPos);
@@ -1225,6 +1248,93 @@ return n;
 return 0;
 }
 
+function bookendFitChars(contentLines, candStart, candEnd, items, bookendIndices) {
+if (!bookendIndices || bookendIndices.length === 0 || !items) return { front: 0, back: 0 };
+const frontIdx = bookendIndices[0];
+const backIdx = bookendIndices.length > 1 ? bookendIndices[bookendIndices.length - 1] : -1;
+let front = 0, back = 0;
+const stripN = s => stripInvisibleChars(String(s ?? ''));
+const fi = items[frontIdx];
+if (fi) {
+if (fi.type === 'literal_block') {
+const lines = fi.text.split('\n').filter(l => l.length > 0);
+for (let j = 0; j < lines.length; j++) {
+const cl = stripN(contentLines[candStart + j] || '');
+const pl = stripN(lines[j]);
+const minL = Math.min(cl.length, pl.length);
+let k = 0;
+while (k < minL && cl[k] === pl[k]) k++;
+front += k;
+if (k < pl.length) break;
+}
+} else if (fi.type === 'inline_pattern') {
+const toks = fi.tokens || [];
+const firstLit = toks.find(t => t.type === 'literal' && (t.text || '').length > 0);
+if (firstLit) {
+const cl = stripN(contentLines[candStart] || '');
+const pl = stripN(firstLit.text);
+const minL = Math.min(cl.length, pl.length);
+let k = 0;
+while (k < minL && cl[k] === pl[k]) k++;
+front = k;
+}
+}
+}
+if (backIdx >= 0) {
+const bi = items[backIdx];
+if (bi) {
+if (bi.type === 'literal_block') {
+const lines = bi.text.split('\n').filter(l => l.length > 0);
+for (let j = 0; j < lines.length; j++) {
+const cl = stripN(contentLines[candEnd - 1 - j] || '');
+const pl = stripN(lines[lines.length - 1 - j]);
+const minL = Math.min(cl.length, pl.length);
+let k = 0;
+while (k < minL && cl[cl.length - 1 - k] === pl[pl.length - 1 - k]) k++;
+back += k;
+if (k < pl.length) break;
+}
+} else if (bi.type === 'inline_pattern') {
+const toks = bi.tokens || [];
+const lastLit = [...toks].reverse().find(t => t.type === 'literal' && (t.text || '').length > 0);
+if (lastLit) {
+const cl = stripN(contentLines[candEnd - 1] || '');
+const pl = stripN(lastLit.text);
+const minL = Math.min(cl.length, pl.length);
+let k = 0;
+while (k < minL && cl[cl.length - 1 - k] === pl[pl.length - 1 - k]) k++;
+back = k;
+}
+}
+}
+}
+return { front, back };
+}
+
+function blockBookendFit(contentLines, startIdx, insertPos, searchLines, frontCount, backCount) {
+const stripN = s => stripInvisibleChars(String(s ?? ''));
+let front = 0, back = 0;
+for (let j = 0; j < frontCount; j++) {
+const cl = stripN(contentLines[startIdx + j] || '');
+const pl = stripN(searchLines[j] || '');
+const minL = Math.min(cl.length, pl.length);
+let k = 0;
+while (k < minL && cl[k] === pl[k]) k++;
+front += k;
+if (k < pl.length) break;
+}
+for (let j = 0; j < backCount; j++) {
+const cl = stripN(contentLines[insertPos - 1 - j] || '');
+const pl = stripN(searchLines[searchLines.length - 1 - j] || '');
+const minL = Math.min(cl.length, pl.length);
+let k = 0;
+while (k < minL && cl[cl.length - 1 - k] === pl[pl.length - 1 - k]) k++;
+back += k;
+if (k < pl.length) break;
+}
+return { front, back };
+}
+
 function matchPatternLineBased(contentLines, start, items, threshold, greedy, startCol = 0, skipItemIndices = null, windowHi = Infinity) {
 let cursorLine = start;
 let cursorCol = startCol;
@@ -1297,8 +1407,19 @@ const patternBlock = lines.join('\n');
 const chars = patternItemChars(item);
 
 if (isBookend) {
-if (!exactEq(sourceBlock, patternBlock)) {
-return { success: false, bestSim: rate(), failureReason: 'Bookend mismatch' };
+const __bkSrc = stripInvisibleChars(norm(sourceBlock)).trim();
+const __bkPat = stripInvisibleChars(norm(patternBlock)).trim();
+if (__bkSrc.length === 0 || __bkPat.length === 0) {
+return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
+}
+const __bkIndices = bookendSet ? Array.from(bookendSet) : [];
+const __isFront = __bkIndices.length > 0 && i === Math.min.apply(null, __bkIndices);
+const __isBack = __bkIndices.length > 0 && i === Math.max.apply(null, __bkIndices);
+if (__isFront && __bkSrc.charCodeAt(0) !== __bkPat.charCodeAt(0)) {
+return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
+}
+if (__isBack && __bkSrc.charCodeAt(__bkSrc.length - 1) !== __bkPat.charCodeAt(__bkPat.length - 1)) {
+return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
 }
 } else {
 const blockSim = wsEq(sourceBlock, patternBlock) ? 1 : (isExactThreshold(threshold) ? 0 : similarityAnchor(sourceBlock, patternBlock));
@@ -1331,17 +1452,29 @@ if (!result || !result.success) return { success: false, bestSim: rate(), failur
 const chars = patternItemChars(item);
 if (isBookend) {
 const toks = item.tokens || [];
-const firstTok = toks[0];
-const lastTok = toks[toks.length - 1];
-const normed = stripInvisibleChars(norm(result.matchText));
-if (firstTok && firstTok.type === 'literal' && (firstTok.text || '').length > 0) {
-if (!normed.startsWith(stripInvisibleChars(norm(firstTok.text)))) {
-return { success: false, bestSim: rate(), failureReason: 'Bookend mismatch' };
+const normed = stripInvisibleChars(norm(result.matchText)).trim();
+const __bkIndices = bookendSet ? Array.from(bookendSet) : [];
+const __isFront = __bkIndices.length > 0 && i === Math.min.apply(null, __bkIndices);
+const __isBack = __bkIndices.length > 0 && i === Math.max.apply(null, __bkIndices);
+if (__isFront) {
+const __firstLit = toks.find(t => t.type === 'literal' && (t.text || '').trim().length > 0);
+if (__firstLit) {
+const __fl = stripInvisibleChars(norm(__firstLit.text)).trim();
+if (__fl.length > 0 && (normed.length === 0 || normed.charCodeAt(0) !== __fl.charCodeAt(0))) {
+return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
 }
 }
-if (lastTok && lastTok.type === 'literal' && (lastTok.text || '').length > 0) {
-if (!normed.endsWith(stripInvisibleChars(norm(lastTok.text)))) {
-return { success: false, bestSim: rate(), failureReason: 'Bookend mismatch' };
+}
+if (__isBack) {
+let __lastLit = null;
+for (let __k = toks.length - 1; __k >= 0; __k--) {
+if (toks[__k].type === 'literal' && (toks[__k].text || '').trim().length > 0) { __lastLit = toks[__k]; break; }
+}
+if (__lastLit) {
+const __ll = stripInvisibleChars(norm(__lastLit.text)).trim();
+if (__ll.length > 0 && (normed.length === 0 || normed.charCodeAt(normed.length - 1) !== __ll.charCodeAt(__ll.length - 1))) {
+return { success: false, bestSim: 0, failureReason: 'Bookend mismatch' };
+}
 }
 }
 } else {
@@ -1380,6 +1513,10 @@ const anchorStart = greedy ? candidates[candidates.length - 1] : candidates[0];
 captured.push({ itemIndex: i, captures: contentLines.slice(cursorLine, anchorStart).map(String), wholeLine: true });
 cursorLine = anchorStart;
 cursorCol = 0;
+}
+
+if ((i & 63) === 0 && typeof globalThis.__activeReplaceSignal !== 'undefined' && globalThis.__activeReplaceSignal && globalThis.__activeReplaceSignal.aborted) {
+return { success: false, bestSim: rate(), failureReason: 'Operation cancelled' };
 }
 }
 
@@ -1584,7 +1721,7 @@ bestFailureReason = res.failureReason || null;
 }
 }
 if (performance.now() - lastOrganizeYieldTime > 30) {
-if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total} · ${pairStrategy}`, 'info', true);
+if (showStatus && pairInfo) showStatus(`📊 ${pairInfo.usedCount}/${pairInfo.totalValid} run ${pairInfo.runNumber}`, 'info', true);
 await new Promise(r => setTimeout(r, 0));
 lastOrganizeYieldTime = performance.now();
 }
@@ -1602,7 +1739,7 @@ bestFailureReason = res.failureReason || null;
 }
 }
 if (performance.now() - lastOrganizeYieldTime > 30) {
-if (showStatus && pairInfo) showStatus(`🗂️ Pair ${pairInfo.current}/${pairInfo.total} · ${pairStrategy}`, 'info', true);
+if (showStatus && pairInfo) showStatus(`📊 ${pairInfo.usedCount}/${pairInfo.totalValid} run ${pairInfo.runNumber}`, 'info', true);
 await new Promise(r => setTimeout(r, 0));
 lastOrganizeYieldTime = performance.now();
 }
@@ -1908,6 +2045,8 @@ if (!patterns || patterns.length === 0) {
 const skipMsg = duplicateRanges.length > 0
 ? `🗑️ ${duplicateRanges.length} redundant pair(s) deleted · No valid patterns remain.`
 : 'No valid patterns found. Check fences and separator.';
+if (showStatus) showStatus(`📊 0/${allParsedPatterns.length} run 1`, 'info', true);
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 if (showStatus) showStatus(skipMsg, 'warning');
 if (updateStats) updateStats();
 return { newContent: content, totalApplied: 0, reports: [], usedCount: 0, patterns: null, usedPatterns: new Set(), noOpPatterns: new Set(), skippedRanges: duplicateRanges, skippedCount: duplicateRanges.length };
@@ -1969,8 +2108,13 @@ patternOutcome.set(pi, o);
 
 function recordFailure(pi, reason, bestSim) {
 const o = patternOutcome.get(pi) || { success: false, applications: 0, bestSimilarity: 0, totalOriginalLines: 0, totalReplacementLines: 0, failureReasons: [] };
-o.bestSimilarity = Math.max(o.bestSimilarity, bestSim || 0);
-if (!o.success && o.failureReasons.length < 3 && o.failureReasons.indexOf(reason) === -1) o.failureReasons.push(reason);
+const sim = bestSim || 0;
+if (sim > o.bestSimilarity) {
+o.bestSimilarity = sim;
+o.failureReasons = [reason];
+} else if (!o.success && sim === o.bestSimilarity && o.failureReasons.length < 3 && o.failureReasons.indexOf(reason) === -1) {
+o.failureReasons.push(reason);
+}
 patternOutcome.set(pi, o);
 }
 
@@ -2033,7 +2177,7 @@ recordFailure(pi, 'wildcards on both edges', 0);
 return false;
 }
 if (minPatternLines > work.length) {
-recordFailure(pi, 'Pattern longer than content', 0);
+recordFailure(pi, 'No match', 0);
 return false;
 }
 const MAX_DEPTH_TRY = 8;
@@ -2064,13 +2208,13 @@ if (!bookendDepth) bookendItemIndices = null;
 
 if (!bookendItemIndices || bookendItemIndices.length === 0) {
 if (patternHasLiteralText) {
-recordFailure(pi, '0/1 bookend(s)', 0);
+recordFailure(pi, 'wildcards on both edges', 0);
 return false;
 }
 }
 
 if (isOrganizeMode) {
-const result = await OrganizeMode(work, searchLines, replLines, stageThreshold, greedy, applyMultipleMatches, signal, showStatus, { current: pi + 1, total: patterns.length, strategy, windows, depth: bookendDepth }, sepForOrganize);
+const result = await OrganizeMode(work, searchLines, replLines, stageThreshold, greedy, applyMultipleMatches, signal, showStatus, { current: pi + 1, total: patterns.length, strategy, windows, depth: bookendDepth, usedCount: usedPatterns.size, totalValid: totalValidPatterns, runNumber }, sepForOrganize);
 if (result.applied) {
 work = result.newWork;
 totalApplied += result.appliedCount;
@@ -2165,16 +2309,18 @@ for (const i of positions) {
 abortIfCancelled();
 const cap = windowHiFor(i);
 const res = matchPatternLineBased(work, i, items, stageThreshold, greedy, 0, skipIndices !== undefined ? skipIndices : bookendItemIndices, cap);
-if (res.success) allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured });
-else {
+if (res.success) {
+const __bf = bookendFitChars(work, i, res.match.end, items, bookendItemIndices);
+allCandidates.push({ start: i, end: res.match.end, avgSim: res.match.avgSim, captured: res.match.captured, bookendFront: __bf.front, bookendBack: __bf.back });
+} else {
 if (res.bestSim && res.bestSim > bestPartialSim) {
 bestPartialSim = res.bestSim;
 bestFailureReason = res.failureReason || null;
 }
 }
 if (performance.now() - lastYieldTime > 30) {
-if (showStatus) showStatus(`⏳ ${strategy} · pair ${pi + 1}/${patterns.length}`, 'info', true);
-await new Promise(r => setTimeout(r, 0));
+if (showStatus) showStatus(`📊 ${usedPatterns.size}/${patterns.length} run ${runNumber}`, 'info', true);
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 lastYieldTime = performance.now();
 }
 }
@@ -2197,6 +2343,10 @@ let matchesToProcess = [];
 
 if (!hasWildcard) {
 allCandidates.sort((a, b) => {
+const af = a.bookendFront || 0, bf = b.bookendFront || 0;
+if (bf !== af) return bf - af;
+const ab = a.bookendBack || 0, bb = b.bookendBack || 0;
+if (bb !== ab) return bb - ab;
 if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
 const lenA = a.end - a.start;
 const lenB = b.end - b.start;
@@ -2227,6 +2377,10 @@ pushMarkerAmbiguity(cand);
 }
 } else {
 allCandidates.sort((a, b) => {
+const af = a.bookendFront || 0, bf = b.bookendFront || 0;
+if (bf !== af) return bf - af;
+const ab = a.bookendBack || 0, bb = b.bookendBack || 0;
+if (bb !== ab) return bb - ab;
 if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
 const lenA = a.end - a.start;
 const lenB = b.end - b.start;
@@ -2259,7 +2413,7 @@ pushMarkerAmbiguity(cand);
 }
 
 if (matchesToProcess.length === 0 && allCandidates.length > 0) {
-recordFailure(pi, 'All matches overlap with previous applications', allCandidates[0]?.avgSim || 0);
+recordFailure(pi, 'No match', allCandidates[0]?.avgSim || 0);
 return false;
 }
 
@@ -2313,9 +2467,16 @@ return anchors && !anchors.sameEdge ? { anchors, opts: { minHeight: minL, maxHei
 });
 
 let outerChanged = true;
+let runNumber = 0;
+const totalValidPatterns = patterns.length;
 
 while (outerChanged) {
 outerChanged = false;
+runNumber++;
+if (showStatus) {
+showStatus(`📊 ${usedPatterns.size}/${totalValidPatterns} run ${runNumber}`, 'info', true);
+}
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
 const windowsByPattern = new Map();
 for (const pi of unmatched()) {
@@ -2407,6 +2568,8 @@ async function ReplaceMode2(contentRaw, rules, threshold, greedy, applyMultipleM
 ellipsisWildcardEnabled = ellipsisWildcard.checked;
 const blocks = parseMode2Blocks(norm(rules).split('\n'), (mode2SeparatorInput && mode2SeparatorInput.value.trim()) || '%%%');
 if (blocks.length === 0) {
+if (showStatus) showStatus(`📊 0/0 run 1`, 'info', true);
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 if (showStatus) showStatus('No valid blocks found. Use separator or blank line to separate blocks.', 'warning');
 return { newContent: contentRaw, totalApplied: 0, reports: [], usedCount: 0, usedBlocks: new Set(), noOpBlocks: new Set() };
 }
@@ -2465,8 +2628,13 @@ throw new Error('Operation cancelled');
 
 function recordBlockFailure(bi, reason, bestSim) {
 const o = blockOutcome.get(bi) || { success: false, bestSimilarity: 0, originalLineCount: 0, replacementLineCount: 0, applications: 0, failureReasons: [] };
-o.bestSimilarity = Math.max(o.bestSimilarity, bestSim || 0);
-if (!o.success && o.failureReasons.length < 3 && o.failureReasons.indexOf(reason) === -1) o.failureReasons.push(reason);
+const sim = bestSim || 0;
+if (sim > o.bestSimilarity) {
+o.bestSimilarity = sim;
+o.failureReasons = [reason];
+} else if (!o.success && sim === o.bestSimilarity && o.failureReasons.length < 3 && o.failureReasons.indexOf(reason) === -1) {
+o.failureReasons.push(reason);
+}
 blockOutcome.set(bi, o);
 }
 
@@ -2640,7 +2808,7 @@ recordBlockFailure(bi, 'Block has no literal lines', 0);
 return false;
 }
 if (effectiveFrontCount + effectiveBackCount > searchLines.length) {
-recordBlockFailure(bi, 'Bookend counts exceed block size', 0);
+recordBlockFailure(bi, 'Bookend mismatch', 0);
 return false;
 }
 
@@ -2696,8 +2864,8 @@ const i = positions ? positions[sIdx] : sIdx;
 if (visitedBlockPositions.has(i)) continue;
 visitedBlockPositions.add(i);
 if (performance.now() - mode2LastYieldTime > 30) {
-if (showStatus) showStatus(`🔍 Block ${bi + 1}/${blocks.length} · ${strategy}`, 'info', true);
-await new Promise(r => setTimeout(r, 0));
+if (showStatus) showStatus(`📊 ${usedBlocks.size}/${blocks.length} run ${runNumber}`, 'info', true);
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 mode2LastYieldTime = performance.now();
 }
 let literalMatched = 0;
@@ -2732,57 +2900,13 @@ break;
 }
 const nextLit = searchLines[nlj];
 let scanIdx = curIdx;
-let foundScan = false;
+let __m2ScanYield2 = performance.now();
 while (scanIdx <= cappedEnd) {
-const candRaw = work[scanIdx] || '';
-const candTrimmed = candRaw.trim();
-const lineEq = exactEq(candRaw, nextLit);
-if (lineEq && (wildcardAnchorN <= 1 || candTrimmed.length >= wildcardAnchorN)) {
-foundScan = true;
-break;
+if (performance.now() - __m2ScanYield2 > 30) {
+abortIfCancelled();
+await new Promise(r => setTimeout(r, 0));
+__m2ScanYield2 = performance.now();
 }
-scanIdx++;
-}
-if (!foundScan) {
-let relaxedScan = -1;
-for (let rIdx = curIdx; rIdx <= cappedEnd; rIdx++) {
-const candRaw = work[rIdx] || '';
-if (exactEq(candRaw, nextLit)) { relaxedScan = rIdx; break; }
-}
-if (relaxedScan !== -1) {
-scanIdx = relaxedScan;
-foundScan = true;
-} else {
-consumedRanges.push([curIdx, curIdx + 1]);
-lastMatchedPos = curIdx;
-curIdx++;
-patternIdx = j + 1;
-continue;
-}
-}
-if (scanIdx > curIdx) consumedRanges.push([curIdx, scanIdx]);
-lastMatchedPos = scanIdx - 1;
-curIdx = scanIdx;
-patternIdx = nlj;
-j = nlj - 1;
-continue;
-}
-let nlj = j + 1;
-while (nlj < searchLines.length) {
-const t = (searchLines[nlj] || '').trim();
-const isWc = ellipsisWildcardEnabled && (t === '…' || t === '...');
-if (isWc) nlj++;
-else break;
-}
-if (nlj >= searchLines.length) {
-lastMatchedPos = cappedEnd;
-curIdx = cappedEnd + 1;
-patternIdx = searchLines.length;
-break;
-}
-const nextLit = searchLines[nlj];
-let scanIdx = curIdx;
-while (scanIdx <= cappedEnd) {
 const candRaw = work[scanIdx] || '';
 const candTrimmed = candRaw.trim();
 const lineOk = exactEq(candRaw, nextLit);
@@ -2810,9 +2934,6 @@ continue;
 const isBookendLine = j < effectiveFrontCount || j >= searchLines.length - effectiveBackCount;
 if (isBookendLine) {
 if (!exactEq(work[curIdx], searchLine)) {
-if (exactBookendChars >= minMatchedChars && literalMatched > 0) {
-break;
-}
 blockFailureReason = 'Bookend mismatch';
 break;
 }
@@ -2884,16 +3005,22 @@ bestBlockFailureReason = 'Average similarity below threshold';
 }
 continue;
 }
-candidates.push({
-startIdx: i,
-insertPos: lastMatchedPos + 1,
-matchedCount: literalMatched,
-avgSim,
-remainingPatternLines: (block.rawLines || searchLines).slice(patternIdx),
-consumedRanges: consumedRanges.slice()
-});
-}
-};
+    {
+      const __bfit = blockBookendFit(work, i, lastMatchedPos + 1, searchLines, effectiveFrontCount, effectiveBackCount);
+      candidates.push({
+        startIdx: i,
+        insertPos: lastMatchedPos + 1,
+        matchedCount: literalMatched,
+        avgSim,
+        remainingPatternLines: (block.rawLines || searchLines).slice(patternIdx),
+        consumedRanges: consumedRanges.slice(),
+        bookendFront: __bfit.front,
+        bookendBack: __bfit.back
+      });
+    }
+    }
+  }
+  };
 
 if (scanPositions) {
 await runBlockPass(scanPositions, windowHiCap);
@@ -2913,6 +3040,10 @@ return false;
 }
 
 candidates.sort((a, b) => {
+const af = a.bookendFront || 0, bf = b.bookendFront || 0;
+if (bf !== af) return bf - af;
+const ab = a.bookendBack || 0, bb = b.bookendBack || 0;
+if (bb !== ab) return bb - ab;
 if (Math.abs(b.avgSim - a.avgSim) > 1e-9) return b.avgSim - a.avgSim;
 if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount;
 if (b.insertPos - b.startIdx !== a.insertPos - a.startIdx) return (b.insertPos - b.startIdx) - (a.insertPos - a.startIdx);
@@ -2994,9 +3125,16 @@ return true;
 }
 
 let outerChanged = true;
+let runNumber = 0;
+const totalValidBlocks = blocks.length;
 
 while (outerChanged) {
 outerChanged = false;
+runNumber++;
+if (showStatus) {
+showStatus(`📊 ${usedBlocks.size}/${totalValidBlocks} run ${runNumber}`, 'info', true);
+}
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
 const windowsByBlock = new Map();
 for (const bi of unmatchedBlocks()) {
@@ -3356,6 +3494,10 @@ return effective;
 function collectAppState() {
 return {
 version: APP_STORAGE_VERSION,
+contentSlots: contentSlots.slice(),
+contentSlotIndex: contentSlotIndex,
+parkingSlots: parkingSlots.slice(),
+parkingSlotIndex: parkingSlotIndex,
 contentArea: contentArea ? contentArea.value : '',
 patternArea: patternArea ? patternArea.value : '',
 parkingArea: parkingArea ? parkingArea.value : '',
@@ -3383,6 +3525,7 @@ stringEllipsis: stringEllipsisToggle ? stringEllipsisToggle.checked : false
 function scheduleSaveState() {
 if (appSaveTimer) clearTimeout(appSaveTimer);
 appSaveTimer = setTimeout(() => {
+syncSlotsFromAreas();
 try { localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(collectAppState())); } catch (e) {}
 appSaveTimer = null;
 }, 300);
@@ -3390,6 +3533,15 @@ appSaveTimer = null;
 
 function saveAppStateNow() {
 if (appSaveTimer) { clearTimeout(appSaveTimer); appSaveTimer = null; }
+syncSlotsFromAreas();
+while (contentSlots.length > 1 && (contentSlots[contentSlots.length - 1] || '').trim() === '') {
+contentSlots.pop();
+}
+if (contentSlotIndex >= contentSlots.length) contentSlotIndex = Math.max(0, contentSlots.length - 1);
+while (parkingSlots.length > 1 && (parkingSlots[parkingSlots.length - 1] || '').trim() === '') {
+parkingSlots.pop();
+}
+if (parkingSlotIndex >= parkingSlots.length) parkingSlotIndex = Math.max(0, parkingSlots.length - 1);
 try { localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(collectAppState())); } catch (e) {}
 }
 
@@ -3399,9 +3551,25 @@ const raw = localStorage.getItem(APP_STORAGE_KEY);
 if (!raw) return false;
 const s = JSON.parse(raw);
 if (!s || s.version !== APP_STORAGE_VERSION) return false;
-if (contentArea && typeof s.contentArea === 'string') contentArea.value = s.contentArea;
+if (Array.isArray(s.contentSlots) && s.contentSlots.length > 0) {
+contentSlots = s.contentSlots.map(x => typeof x === 'string' ? x : '');
+contentSlotIndex = Math.max(0, Math.min(typeof s.contentSlotIndex === 'number' ? s.contentSlotIndex : 0, contentSlots.length - 1));
+if (contentArea) contentArea.value = contentSlots[contentSlotIndex] || '';
+} else if (contentArea && typeof s.contentArea === 'string') {
+contentSlots = [s.contentArea];
+contentSlotIndex = 0;
+contentArea.value = s.contentArea;
+}
 if (patternArea && typeof s.patternArea === 'string') patternArea.value = s.patternArea;
-if (parkingArea && typeof s.parkingArea === 'string') parkingArea.value = s.parkingArea;
+if (Array.isArray(s.parkingSlots) && s.parkingSlots.length > 0) {
+parkingSlots = s.parkingSlots.map(x => typeof x === 'string' ? x : '');
+parkingSlotIndex = Math.max(0, Math.min(typeof s.parkingSlotIndex === 'number' ? s.parkingSlotIndex : 0, parkingSlots.length - 1));
+if (parkingArea) parkingArea.value = parkingSlots[parkingSlotIndex] || '';
+} else if (parkingArea && typeof s.parkingArea === 'string') {
+parkingSlots = [s.parkingArea];
+parkingSlotIndex = 0;
+parkingArea.value = s.parkingArea;
+}
 if (similarityRange && s.similarity != null) similarityRange.value = s.similarity;
 if (separatorInput && typeof s.separator === 'string') separatorInput.value = s.separator;
 if (mode2Threshold && s.mode2Threshold != null) mode2Threshold.value = s.mode2Threshold;
@@ -4061,39 +4229,9 @@ if (replacement.slice(replacement.length - k) === following.slice(0, k)) return 
 return 0;
 }
 
-function applyStringReplacementAt(work, start, end, replacement) {
-const before = work.slice(0, start);
-const after = work.slice(end);
-const consume = stringReplacementOverlap(replacement, after);
-const nextWork = before + replacement + after.slice(consume);
-return { work: nextWork, nextPos: start + replacement.length, consumed: consume };
-}
 
-function findCharAnchorHits(work, anchor, fromPos) {
-const hits = [];
-const aLen = anchor.length;
-if (aLen === 0) return hits;
-const startAt = Math.max(0, fromPos | 0);
-const cleanFastPath = work.indexOf('\r') === -1 && anchor.indexOf('\r') === -1 && !INVISIBLE_CHAR_TEST.test(work) && !INVISIBLE_CHAR_TEST.test(anchor);
-if (cleanFastPath) {
-let p = startAt;
-let idx = work.indexOf(anchor, p);
-while (idx !== -1) {
-hits.push({ start: idx, end: idx + aLen });
-p = idx + 1;
-idx = work.indexOf(anchor, p);
-}
-return hits;
-}
-for (let p = startAt; p + aLen <= work.length; p++) {
-if (exactEq(work.slice(p, p + aLen), anchor)) {
-hits.push({ start: p, end: p + aLen });
-}
-}
-return hits;
-}
 
-function runStringCharBookend(work, searchStr, threshold, greedy, fromPos) {
+async function runStringCharBookend(work, searchStr, threshold, greedy, fromPos) {
 const sLen = searchStr.length;
 if (sLen === 0) return { error: 'Empty search string' };
 
@@ -4101,94 +4239,84 @@ if (sLen < 4) {
 const startAt = Math.max(0, fromPos | 0);
 for (let p = startAt; p + sLen <= work.length; p++) {
 if (exactEq(work.slice(p, p + sLen), searchStr)) {
-return { match: { start: p, end: p + sLen, sim: 1 } };
+return { match: { start: p, end: p + sLen, sim: 1, exactRun: sLen } };
 }
 }
 return { error: 'No match' };
 }
 
-const GROW_STEP = 2;
-const maxPerSide = Math.min(Math.max(3 + GROW_STEP, Math.floor(sLen / 3)), Math.max(1, Math.floor((sLen - 1) / 2)));
-
-let frontLen = 1;
-let frontHits = findCharAnchorHits(work, searchStr.slice(0, frontLen), fromPos);
-while (frontLen < maxPerSide && frontHits.length > 1) {
-const nextLen = Math.min(frontLen + GROW_STEP, maxPerSide);
-const next = findCharAnchorHits(work, searchStr.slice(0, nextLen), fromPos);
-if (next.length === 0 || next.length >= frontHits.length) break;
-frontLen = nextLen;
-frontHits = next;
-}
-
-let backLen = 1;
-let backHits = findCharAnchorHits(work, searchStr.slice(-backLen), fromPos);
-while (backLen < maxPerSide && backHits.length > 1) {
-const nextLen = Math.min(backLen + GROW_STEP, maxPerSide);
-const next = findCharAnchorHits(work, searchStr.slice(-nextLen), fromPos);
-if (next.length === 0 || next.length >= backHits.length) break;
-backLen = nextLen;
-backHits = next;
-}
-
-if (frontHits.length === 0) return { error: 'No front anchor' };
-if (backHits.length === 0) return { error: 'No back anchor' };
-
-const middlePattern = searchStr.slice(frontLen, sLen - backLen);
-const mpl = middlePattern.length;
-
-// Bounded gap: the middle may grow, but not without limit.
-// Prevents short anchors from matching a 14k-char span.
-const minMid = mpl > 0 ? Math.floor(mpl * 0.5) : 0;
-const maxMid = mpl > 0 ? Math.max(Math.ceil(mpl * 3), mpl + 500) : 500;
-
-function middleSimilarity(middle) {
-if (mpl === 0) return middle.length === 0 ? 1 : 0;
-if (middle.length === 0) return 0;
-if (exactEq(middle, middlePattern)) return 1;
-// Two algorithms, take the best.
-const w = wordAnchorSimilarity(middle, middlePattern, SIM_ANCHOR_DEFAULT).similarity;
-const t = oneThirdRecursionSimilarity(middle, middlePattern);
-return Math.max(w, t);
-}
-
+const startAt = Math.max(0, fromPos | 0);
+const sFirst = searchStr[0];
+const sLast = searchStr[sLen - 1];
+const minFront = Math.min(4, sLen);
 let bestResult = null;
 let bestRejectedSim = 0;
 let bestRejectedInfo = null;
-for (const fh of frontHits) {
-if (fh.end > work.length) continue;
-const loB = fh.end + minMid;
-const hiB = fh.end + maxMid;
+let lastYield = performance.now();
 
-let lo = 0, hi = backHits.length;
-while (lo < hi) {
-const m = (lo + hi) >>> 1;
-if (backHits[m].start < loB) lo = m + 1; else hi = m;
+for (let p = startAt; p < work.length; p++) {
+if (performance.now() - lastYield > 16) {
+await new Promise(r => setTimeout(r, 0));
+lastYield = performance.now();
 }
-let end = lo;
-while (end < backHits.length && backHits[end].start <= hiB) end++;
-if (lo >= end) continue;
-
-for (let j = lo; j < end; j++) {
-const bh = backHits[j];
-const middle = work.slice(fh.end, bh.start);
-const midSim = middleSimilarity(middle);
-const rate = midSim;
-
-if (rate < threshold) {
-if (rate > bestRejectedSim) {
-bestRejectedSim = rate;
-bestRejectedInfo = { midSim, middleLen: middle.length, frontLen, backLen, mpl };
+if (!exactEq(work[p], sFirst)) continue;
+let frontRun = 0;
+while (frontRun < sLen && p + frontRun < work.length && exactEq(work[p + frontRun], searchStr[frontRun])) frontRun++;
+if (frontRun < minFront) continue;
+const lenHi = Math.min(work.length, p + sLen + 24);
+for (let end = p + frontRun; end <= lenHi; end++) {
+if (performance.now() - lastYield > 16) {
+await new Promise(r => setTimeout(r, 0));
+lastYield = performance.now();
+}
+if (end <= p) continue;
+if (!exactEq(work[end - 1], sLast)) continue;
+let backRun = 0;
+const backLimit = Math.min(sLen - frontRun, end - p - frontRun);
+while (backRun < backLimit && exactEq(work[end - 1 - backRun], searchStr[sLen - 1 - backRun])) backRun++;
+const midStart = p + frontRun;
+const midEnd = end - backRun;
+const mid = midStart < midEnd ? work.slice(midStart, midEnd) : '';
+const midPat = searchStr.slice(frontRun, sLen - backRun);
+const totalLen = end - p;
+const maxPossibleSim = (frontRun + backRun + midPat.length) / Math.max(totalLen, sLen);
+if (maxPossibleSim < threshold) {
+if (maxPossibleSim > bestRejectedSim) {
+bestRejectedSim = maxPossibleSim;
+bestRejectedInfo = { frontLen: frontRun, backLen: backRun };
 }
 continue;
 }
-
-// Exact match on both anchors and middle → short-circuit.
-if (midSim === 1 && rate === 1 && !greedy) {
-return { match: { start: fh.start, end: bh.end, sim: rate } };
+let midSim;
+if (midPat.length === 0) {
+midSim = mid.length === 0 ? 1 : 0;
+} else if (mid.length === 0) {
+midSim = midPat.length <= 2 ? 1 : 0;
+} else if (exactEq(mid, midPat)) {
+midSim = 1;
+} else {
+const w = wordAnchorSimilarity(mid, midPat, SIM_ANCHOR_DEFAULT).similarity;
+const t = oneThirdRecursionSimilarity(mid, midPat);
+midSim = Math.max(w, t);
 }
-
-const candidate = { start: fh.start, end: bh.end, sim: rate };
+const matched = frontRun + backRun + midSim * midPat.length;
+const sim = matched / Math.max(totalLen, sLen);
+if (sim < threshold) {
+if (sim > bestRejectedSim) {
+bestRejectedSim = sim;
+bestRejectedInfo = { midSim, middleLen: mid.length, frontLen: frontRun, backLen: backRun, mpl: midPat.length };
+}
+continue;
+}
+if (sim === 1 && !greedy) {
+return { match: { start: p, end, sim: 1, exactRun: frontRun + backRun } };
+}
+const candidate = { start: p, end, sim, exactRun: frontRun + backRun };
 if (!bestResult) { bestResult = candidate; continue; }
+if (candidate.exactRun !== bestResult.exactRun) {
+if (candidate.exactRun > bestResult.exactRun) bestResult = candidate;
+continue;
+}
 if (greedy) {
 const lenDiff = (candidate.end - candidate.start) - (bestResult.end - bestResult.start);
 if (lenDiff > 0) { bestResult = candidate; continue; }
@@ -4265,6 +4393,8 @@ throw new Error('Operation cancelled');
 for (let i = 0; i < usable.length; i++) {
 abortIfCancelled();
 const { searchStr, replStr, pat } = usable[i];
+if (showStatus) showStatus(`📊 ${i + 1}/${usable.length} run 1`, 'info', true);
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 const range = pat.lineIndices ? { start: pat.lineIndices.searchStart, end: pat.lineIndices.replEnd } : null;
 if (isNoOpBlock(searchStr, replStr)) {
 noOpPatterns.add(i);
@@ -4316,11 +4446,27 @@ work = work.slice(0, found) + replStr + work.slice(found + sLen);
 count++;
 }
 }
-if (count === 0) stringFailureReason = 'No match';
+if (count === 0) {
+const r0 = await runStringCharBookend(work, searchStr, threshold, greedy, 0);
+if (r0 && r0.match) {
+const m0 = r0.match;
+totalMatchChars += (m0.end - m0.start);
+totalReplaceChars += replStr.length;
+work = work.slice(0, m0.start) + replStr + work.slice(m0.end);
+count++;
+bestSim = Math.max(bestSim, m0.sim);
+} else if (r0 && r0.error === 'Below threshold') {
+stringFailureReason = 'Below threshold';
+if (typeof r0.bestSim === 'number') bestSim = Math.max(bestSim, r0.bestSim);
+if (r0.info) bestSimInfo = r0.info;
+} else {
+stringFailureReason = 'No match';
+}
+}
 } else {
 let pos = 0;
-while (pos < work.length) {
-const r = runStringCharBookend(work, searchStr, threshold, greedy, pos);
+while ((count === 0 || applyMultipleMatches) && pos < work.length) {
+const r = await runStringCharBookend(work, searchStr, threshold, greedy, pos);
 if (!r || r.error) {
 if (count === 0) {
 stringFailureReason = r ? r.error : 'No match';
@@ -4418,7 +4564,7 @@ skippedCount: duplicateRanges.length
 reports.push({ bestSimilarity: bestSim || 1, success: true, originalLineCount: 0, replacementLineCount: 0, originalCharCount: totalMatchChars, replacementCharCount: totalReplaceChars, isStringMode: true, failureReason: null, applications: count, searchText: searchStr, range });
 } else {
 const failNote = stringFailureReason === 'Below threshold' && bestSimInfo
-? `Below threshold (best ${Math.round(bestSim * 100)}%, midSim ${Math.round(bestSimInfo.midSim * 100)}%, midLen ${bestSimInfo.middleLen})`
+? `Below threshold (front ${bestSimInfo.frontLen || 0}, back ${bestSimInfo.backLen || 0})`
 : (stringFailureReason || 'No match');
 reports.push({ bestSimilarity: bestSim, success: false, failureReason: failNote, applications: 0, searchText: searchStr, range });
 }
@@ -4459,6 +4605,8 @@ for (let bi = 0; bi < blocks.length; bi++) {
 abortIfCancelled();
 const blk = blocks[bi];
 const blockStr = (blk.rawLines || blk.searchLines).join('\n');
+if (showStatus) showStatus(`📊 ${bi + 1}/${blocks.length} run 1`, 'info', true);
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 const range = { start: blk.startLine, end: blk.endLine };
 
 if (blockStr.trim().length === 0) {
@@ -4474,13 +4622,25 @@ continue;
 const hasInvisible = INVISIBLE_CHAR_TEST.test(work) || INVISIBLE_CHAR_TEST.test(blockStr);
 let anchorPos = -1;
 let sigLen = 0;
+let __sigScanYield = performance.now();
 for (let L = blockStr.length; L >= minMatched; L--) {
+if (performance.now() - __sigScanYield > 30) {
+abortIfCancelled();
+await new Promise(r => setTimeout(r, 0));
+__sigScanYield = performance.now();
+}
 const cand = blockStr.slice(0, L);
 let idx = -1;
 if (!hasInvisible) {
 idx = work.indexOf(cand);
 } else {
+let __sigInnerYield = performance.now();
 for (let p = 0; p + L <= work.length; p++) {
+if (performance.now() - __sigInnerYield > 30) {
+abortIfCancelled();
+await new Promise(r => setTimeout(r, 0));
+__sigInnerYield = performance.now();
+}
 if (exactEq(work.slice(p, p + L), cand)) { idx = p; break; }
 }
 }
@@ -4557,8 +4717,10 @@ if (abortController) abortController.abort();
 const myController = new AbortController();
 abortController = myController;
 const signal = myController.signal;
+globalThis.__activeReplaceSignal = signal;
 
 if (replaceBtn) replaceBtn.textContent = '⏹ Cancel';
+await new Promise(r => setTimeout(r, 0));
 
 if (!contentArea || !patternArea) {
 replaceInProgress = false;
@@ -4736,6 +4898,7 @@ let msg = '';
 if (totalApplied > 0) msg = `✅ ${totalApplied} pattern(s) applied · ${runsUsed} run(s).`;
 else msg = 'No result';
 if (skippedCount > 0) msg += ` · 🗑️ ${skippedCount} redundant pair(s) deleted`;
+await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 showStatus(msg, totalApplied > 0 ? 'info' : 'warning');
 } catch (err) {
 console.error(err);
@@ -4780,6 +4943,7 @@ replaceInProgress = false;
 if (replaceBtn) replaceBtn.textContent = currentMode === 1 ? 'Replace All' : 'Append All';
 abortController = null;
 }
+globalThis.__activeReplaceSignal = null;
 if (statusTimeout === null && statusMsgEl && !statusMsgEl.classList.contains('hidden')) {
 statusTimeout = setTimeout(() => statusMsgEl.classList.add('hidden'), 6000);
 }
@@ -4834,6 +4998,8 @@ if (inputCommitTimer) { clearTimeout(inputCommitTimer); inputCommitTimer = null;
 if (partialReplaceSnapshot) partialReplaceSnapshot = null;
 if (contentArea) contentArea.value = '';
 if (patternArea) patternArea.value = '';
+contentSlots = [''];
+contentSlotIndex = 0;
 
 if (ellipsisWildcard) ellipsisWildcard.checked = false;
 if (greedyEllipsis) greedyEllipsis.checked = false;
@@ -4880,8 +5046,87 @@ redoStack.length = 0;
 lastSnapshot = getSnapshot();
 saveHistory();
 updateUndoRedoButtons();
+updateContentSlotUI();
+updateParkingSlotUI();
 updateStats();
 saveAppStateNow();
+}
+
+function updateContentSlotUI() {
+const indicator = document.getElementById('slotIndicator');
+if (indicator) indicator.textContent = (contentSlotIndex + 1) + '/' + contentSlots.length;
+}
+
+function updateParkingSlotUI() {
+const indicator = document.getElementById('parkingSlotIndicator');
+if (indicator) indicator.textContent = (parkingSlotIndex + 1) + '/' + parkingSlots.length;
+}
+
+function syncSlotsFromAreas() {
+if (contentArea && contentSlots.length > 0 && contentSlotIndex < contentSlots.length) {
+contentSlots[contentSlotIndex] = contentArea.value;
+}
+if (parkingArea && parkingSlots.length > 0 && parkingSlotIndex < parkingSlots.length) {
+parkingSlots[parkingSlotIndex] = parkingArea.value;
+}
+}
+
+function switchContentSlot(dir) {
+if (!contentArea) return;
+syncSlotsFromAreas();
+if (dir > 0) {
+if ((contentSlots[contentSlotIndex] || '').trim() === '') return;
+if (contentSlotIndex < contentSlots.length - 1) {
+contentSlotIndex++;
+} else {
+contentSlots.push('');
+contentSlotIndex = contentSlots.length - 1;
+}
+} else {
+if ((contentSlots[contentSlotIndex] || '').trim() === '' && contentSlots.length > 1) {
+contentSlots.splice(contentSlotIndex, 1);
+contentSlotIndex = Math.max(0, Math.min(contentSlotIndex - 1, contentSlots.length - 1));
+} else if (contentSlotIndex === 0) {
+contentSlotIndex = contentSlots.length - 1;
+} else {
+contentSlotIndex--;
+}
+}
+contentArea.value = contentSlots[contentSlotIndex] || '';
+updateContentSlotUI();
+resetOpStats();
+undoStack.length = 0;
+redoStack.length = 0;
+lastSnapshot = getSnapshot();
+saveHistory();
+updateUndoRedoButtons();
+updateStats();
+}
+
+function switchParkingSlot(dir) {
+if (!parkingArea) return;
+syncSlotsFromAreas();
+if (dir > 0) {
+if ((parkingSlots[parkingSlotIndex] || '').trim() === '') return;
+if (parkingSlotIndex < parkingSlots.length - 1) {
+parkingSlotIndex++;
+} else {
+parkingSlots.push('');
+parkingSlotIndex = parkingSlots.length - 1;
+}
+} else {
+if ((parkingSlots[parkingSlotIndex] || '').trim() === '' && parkingSlots.length > 1) {
+parkingSlots.splice(parkingSlotIndex, 1);
+parkingSlotIndex = Math.max(0, Math.min(parkingSlotIndex - 1, parkingSlots.length - 1));
+} else if (parkingSlotIndex === 0) {
+parkingSlotIndex = parkingSlots.length - 1;
+} else {
+parkingSlotIndex--;
+}
+}
+parkingArea.value = parkingSlots[parkingSlotIndex] || '';
+updateParkingSlotUI();
+scheduleSaveState();
 }
 
 function init() {
@@ -4920,6 +5165,14 @@ updateStats();
 if (replaceBtn) replaceBtn.addEventListener('click', Replace);
 if (undoBtn) undoBtn.addEventListener('click', performUndo);
 if (redoBtn) redoBtn.addEventListener('click', performRedo);
+const slotPrevBtnEl = document.getElementById('slotPrevBtn');
+const slotNextBtnEl = document.getElementById('slotNextBtn');
+if (slotPrevBtnEl) slotPrevBtnEl.addEventListener('click', () => switchContentSlot(-1));
+if (slotNextBtnEl) slotNextBtnEl.addEventListener('click', () => switchContentSlot(1));
+const parkingSlotPrevBtnEl = document.getElementById('parkingSlotPrevBtn');
+const parkingSlotNextBtnEl = document.getElementById('parkingSlotNextBtn');
+if (parkingSlotPrevBtnEl) parkingSlotPrevBtnEl.addEventListener('click', () => switchParkingSlot(-1));
+if (parkingSlotNextBtnEl) parkingSlotNextBtnEl.addEventListener('click', () => switchParkingSlot(1));
 if (resetBtn) resetBtn.addEventListener('click', () => openResetPopper());
 if (resetPopperOk) resetPopperOk.addEventListener('click', () => { closeResetPopper(); performReset(); });
 if (resetPopperCancel) resetPopperCancel.addEventListener('click', closeResetPopper);
@@ -4998,6 +5251,8 @@ if (stateOk && historyOk) {
 saveHistory();
 }
 updateUndoRedoButtons();
+updateContentSlotUI();
+updateParkingSlotUI();
 }
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
